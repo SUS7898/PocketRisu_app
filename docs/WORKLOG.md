@@ -116,7 +116,12 @@
 - dev.8 첫 실행: `KeepAlive started` → `bundled` → `healthy`. 설치 재시도 시 `reusing downloaded` 동작 확인.
 - 번들 재빌드: 패치 2개 적용.
 
+### 실기기 9차 (Tab S7+, dev.9) — 첫 태블릿 로그
+- 번들 모드·keep-alive·알림 권한 정상. 부트스트랩→홈 14초. 채팅 열기 재시도 없음, `/api/db/flush` 0건 → **패치 020 효과 확인**.
+- 20:06:57 MainActivity 0.3초 간격 2회 재생성(프로세스 유지) → 페이지 재로드(T-15). `RetainedSession`으로 WebView를 Activity 재생성에서 살리고 `configChanges` 확대.
+
 ### 미검증 / 다음
+- T-15: 태블릿에서 키보드 커버 탈착·회전·분할 화면 뒤 `WebView re-attached` 로그와 함께 페이지가 유지되는지.
 - dev.9 로그: `POST /api/db/flush` 부재 + 첫 채팅 열기 재시도 없음 확인.
 - T-12: keep-alive 켠 상태에서 앱 전환 후 복귀 시 `renderer gone` 재발 여부.
 - T-11 실기기 확인(세로/가로/키보드/분할 화면).

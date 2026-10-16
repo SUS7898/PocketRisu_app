@@ -148,6 +148,16 @@
 - 해결: dev.8의 keep-alive 포그라운드 서비스 — 포그라운드 서비스를 가진 프로세스는 동결 대상에서 제외된다. dev.8 이후 로그에서 같은 패턴이 사라지는지 확인.
 - 참고: 이 세션은 67분 백그라운드 뒤에도 렌더러가 살아 돌아왔다(`renderer gone` 없음). 즉 T-12의 종료는 메모리 압박이 있을 때만 일어난다.
 
+## T-15. 태블릿에서 갑자기 새로고침된 것처럼 처음부터 다시 로드됨 (프로세스는 살아 있음)
+- 발생: 2026-10-16 20:06:57, Galaxy Tab S7+ (Android 13), dev.9 번들 모드.
+- 증상(로그): `I/App start` 없이 `KeepAlive started` → 프로브 `Job was cancelled` → 0.3초 뒤 다시 `KeepAlive started` → 6초 뒤 모드 결정 → `WebView ready` → `page finished`. 즉 **프로세스는 그대로인데 MainActivity가 0.3초 간격으로 두 번 재생성**됐고, 첫 인스턴스의 코루틴은 취소됨. 재생성마다 WebView를 새로 만들어 페이지를 다시 로드했으므로 사용자에겐 "새로고침"으로 보임.
+- 원인: 선언하지 않은 **구성 변경**(configuration change). 태블릿은 키보드 커버 연결/분리(`keyboard`·`navigation`), DeX·폰트 크기(`fontScale`), 로캘 등이 자주 바뀌고, 이전 `configChanges`에는 `orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density`만 있었다. 두 번 연속 재생성은 키보드 커버가 `keyboard`와 `navigation`을 연달아 바꾼 패턴과 일치.
+- 해결(두 겹):
+  1. `configChanges`에 `keyboard|navigation|fontScale|locale|layoutDirection|colorMode|touchscreen|mcc|mnc|grammaticalGender` 추가 → 대부분의 변경은 재생성 자체가 없음.
+  2. 그래도 재생성되는 경우를 위해 **WebView를 Activity 밖(`RetainedSession`)에 보관**: `MutableContextWrapper`로 만든 WebView를 `onDestroy(isFinishing=false)`에서 떼어 두고, 새 Activity가 `baseContext`·클라이언트 host만 바꿔 다시 붙인다. 페이지는 프로세스당 한 번만 로드된다. 로그에 `WebView re-attached after activity recreation`이 남는다.
+- 함께 확인된 것: S7+에서 부트스트랩→홈 14초(S26과 동급), 채팅 열기 1회 요청으로 즉시, **`/api/db/flush` 0건**(패치 020 작동), 알림 권한 허용·keep-alive 기동 정상.
+- 재발 방지: `I/App start` 없이 `WebView ready`가 다시 찍히면 이 항목. 재생성 원인을 특정하려면 `onConfigurationChanged`에서 바뀐 필드를 로그로 남기는 것이 다음 단계(현재는 생략).
+
 ## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패
 - 발생: 2026-10-16 14:58, S26 Ultra(One UI, Android 17), dev.2 → dev.4 첫 시도. 두 번째 시도는 성공.
 - 원인: `SessionParams.setRequireUserAction(USER_ACTION_NOT_REQUIRED)`를 요청하면 One UI가 "알 수 없는 출처" 패키지의 자체 업데이트를 세션 단계에서 거부함(사용자 확인 창이 뜬 뒤 0.8초 만에 ABORTED).
