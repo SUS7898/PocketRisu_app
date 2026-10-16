@@ -60,6 +60,7 @@ class MainActivity : AppCompatActivity() {
 
     private var bundleServer: BundleServer? = null
     private var bundleVersionInUse: String? = null
+    private var bundleVerified = true
     private var apiSeen = false
     private val handler = Handler(Looper.getMainLooper())
     private val healthCheck = Runnable { if (!apiSeen) fallbackToServerUi("no /api traffic within ${HEALTH_TIMEOUT_MS / 1000}s") }
@@ -116,7 +117,11 @@ class MainActivity : AppCompatActivity() {
         checkForUpdateDaily()
     }
 
-    /** Gathers the inputs of UiMode.decide; each probe is capped so launch never hangs on the network. */
+    /**
+     * Gathers the inputs of UiMode.decide. Probes are cancellable and capped (T-9), and when the
+     * server cannot be reached the bundle starts on the last known server version, to be verified
+     * as soon as the first API request proves the server is back ([verifyServerVersionLater]).
+     */
     private suspend fun decideMode(base: String): UiMode {
         val repo = BundleRepository(this)
         if (!settings.bundleEnabled || !repo.available) {
@@ -126,21 +131,50 @@ class MainActivity : AppCompatActivity() {
         if (settings.bundleDisabledForVersion == bundleVersion) {
             return UiMode.decide(true, bundleVersion, null, settings.bundleDisabledForVersion, null)
         }
-        return coroutineScope {
-            val server = async { withTimeoutOrNull(PROBE_TIMEOUT_MS) { ServerProbe.probe(base).getOrNull() } }
-            val patchSync = async { withTimeoutOrNull(PROBE_TIMEOUT_MS) { ServerIndexProbe.fetchPatchSync(base) } }
-            val serverVersion = server.await()?.version
-            if (serverVersion != null) settings.lastServerInfo = "version $serverVersion (deploymentType=${server.await()?.deploymentType})"
-            UiMode.decide(true, bundleVersion, serverVersion, settings.bundleDisabledForVersion, patchSync.await())
+        val (serverVersion, patchSync) = coroutineScope {
+            val server = async { withTimeoutOrNull(PROBE_TIMEOUT_MS) { ServerProbe.probe(base, settings).getOrNull() } }
+            val ps = async { withTimeoutOrNull(PROBE_TIMEOUT_MS) { ServerIndexProbe.fetchPatchSync(base) } }
+            server.await()?.version to ps.await()
+        }
+        if (patchSync != null) settings.lastPatchSync = patchSync
+        if (serverVersion != null) {
+            bundleVerified = true
+            return UiMode.decide(true, bundleVersion, serverVersion, settings.bundleDisabledForVersion, patchSync ?: settings.lastPatchSync)
+        }
+        val cached = settings.lastServerVersion
+        val cachedFresh = cached != null && System.currentTimeMillis() - settings.lastServerVersionAt < AppSettings.CACHED_SERVER_VERSION_MAX_AGE_MS
+        if (cachedFresh) {
+            bundleVerified = false
+            AppLog.w("Bundle", "server probe failed within ${PROBE_TIMEOUT_MS}ms; starting on cached server version $cached (unverified)")
+            return UiMode.decide(true, bundleVersion, cached, settings.bundleDisabledForVersion, settings.lastPatchSync)
+        }
+        return UiMode.decide(true, bundleVersion, null, settings.bundleDisabledForVersion, null)
+    }
+
+    /** Bundled on a cached version: once the server answers, confirm it still matches the bundle. */
+    private fun verifyServerVersionLater(base: String) {
+        lifecycleScope.launch {
+            val info = ServerProbe.probe(base, settings).getOrNull() ?: return@launch
+            val bundle = bundleVersionInUse ?: return@launch
+            if (info.version == bundle) {
+                bundleVerified = true
+                AppLog.i("Bundle", "cached server version confirmed (${info.version})")
+            } else {
+                fallbackToServerUi("server version changed to ${info.version} (bundle $bundle)", countFailure = false)
+            }
         }
     }
 
-    /** Bundled UI misbehaved: count it, maybe disable the bundle version, and reload the server UI. */
-    private fun fallbackToServerUi(reason: String) {
+    /** Bundled UI misbehaved (or no longer matches): maybe count it, and reload the server UI. */
+    private fun fallbackToServerUi(reason: String, countFailure: Boolean = true) {
         val version = bundleVersionInUse ?: return
         handler.removeCallbacks(healthCheck)
-        val failures = settings.recordBundleFailure(version)
-        AppLog.e("Bundle", "fallback to server-ui: $reason (failure $failures/${AppSettings.BUNDLE_MAX_FAILURES} for v$version)")
+        if (countFailure) {
+            val failures = settings.recordBundleFailure(version)
+            AppLog.e("Bundle", "fallback to server-ui: $reason (failure $failures/${AppSettings.BUNDLE_MAX_FAILURES} for v$version)")
+        } else {
+            AppLog.w("Bundle", "switching to server-ui: $reason")
+        }
         bundleServer = null
         bundleVersionInUse = null
         UiModeState.current = UiMode.ServerUi("fallback: $reason")
@@ -161,6 +195,7 @@ class MainActivity : AppCompatActivity() {
         handler.removeCallbacks(healthCheck)
         settings.recordBundleHealthy(version)
         AppLog.i("Bundle", "healthy: first /api request observed (served ${bundleServer?.served} bundle files)")
+        if (!bundleVerified) settings.serverUrl?.let { verifyServerVersionLater(it) }
     }
 
     override fun onResume() {

@@ -24,8 +24,14 @@ class UpdateInstaller(private val context: Context) {
 
     suspend fun download(release: UpdateChecker.Release, onProgress: (done: Long, total: Long) -> Unit): File =
         withContext(Dispatchers.IO) {
-            dir.listFiles()?.forEach { it.delete() }
             val target = File(dir, release.apkName)
+            // A previous attempt that the system rejected (T-10) leaves a complete file; verify() re-checks it.
+            if (target.exists() && release.apkSize > 0 && target.length() == release.apkSize) {
+                AppLog.i(TAG, "reusing downloaded ${release.apkName} bytes=${target.length()}")
+                onProgress(target.length(), target.length())
+                return@withContext target
+            }
+            dir.listFiles()?.forEach { it.delete() }
             val req = Request.Builder().url(release.apkUrl).header("User-Agent", Http.userAgentSuffix).build()
             Http.client.newCall(req).execute().use { res ->
                 if (!res.isSuccessful) error("download HTTP ${res.code}")

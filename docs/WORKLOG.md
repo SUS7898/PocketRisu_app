@@ -96,7 +96,14 @@
 - 자체 업데이트 dev.2→dev.4(26MB): 1차 `INSTALL_FAILED_ABORTED … unknown source package`(T-8), 2차 성공. `USER_ACTION_NOT_REQUIRED` 제거.
 - 채팅 열기: 패치 010대로 120초 대기 후 재시도, 재시도는 25초 뒤 `Failed to fetch`. 요청 3초 전 두 번째 `database.bin` 전체 읽기 관찰 → 전체 쓰기(full write) 가설(T-7 추가 증거). 쓰기 경로·`[Save]` 콘솔 경고 기록 추가.
 
+### 실기기 6차 (dev.5) — 실행 정지·설치 검증·플러그인 발견
+- 실행 후 44초 빈 화면 → `mode=server-ui (server version unknown)`: 블로킹 프로브가 타임아웃을 무력화(T-9). `Call.await()` + `probeClient`로 교체, 서버 못 닿으면 캐시된 버전으로 번들 시작 후 백그라운드 재확인.
+- 업데이트 첫 시도 `INSTALL_FAILED_VERIFICATION_FAILURE`, 두 번째 성공(T-10). 안내 토스트 + APK 재사용.
+- 채팅 3개 모두 재시도 없이 열림. 전체 업로드(`write database.bin`) 없음 → T-7 가설 보류. 대신 ① 직전 4분 서버 연결 불가(ConnectException, 공인 IP 경로) ② WygLore 플러그인 78MB+ 옛 페이로드 경고 발견.
+- 테스트: 19건 통과, Lint 오류 0, assembleRelease 성공.
+
 ### 미검증 / 다음
+- 사용자 조치 권고: WygLore 옛 데이터 정리, Wi-Fi에서 내부 주소/Tailscale로 접속 비교.
 - dev.5 로그에서 `POST write key=database/database.bin len=…` 또는 `[Save] Patch hash mismatch` 확인 → 전체 쓰기 가설 확정.
 - T-7 서버 로그 확인(사용자: `docker logs --since 5m risuai-nodeonly`).
 - 번들 모드 실기기: 로그에 `mode=bundled v1.14.0 patchSync=…` → `I/Bundle healthy` 가 나와야 함. 안 나오면 `E/Bundle fallback …` 사유 확인.

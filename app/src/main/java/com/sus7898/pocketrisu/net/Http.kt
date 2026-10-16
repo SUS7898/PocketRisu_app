@@ -3,13 +3,19 @@ package com.sus7898.pocketrisu.net
 import android.webkit.CookieManager
 import com.sus7898.pocketrisu.BuildConfig
 import com.sus7898.pocketrisu.log.AppLog
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
+import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
  * One OkHttp client for all native requests. Cookies are shared with the WebView so a native
@@ -58,5 +64,33 @@ object Http {
             .readTimeout(60, TimeUnit.SECONDS)
             .addInterceptor(timing)
             .build()
+    }
+
+    /**
+     * For launch-time probes: short timeouts and no route retries, so an unreachable server costs
+     * seconds, not minutes (docs/TROUBLESHOOTING.md T-9: a probe once blocked launch for 44s and a
+     * connect attempt ran 271s through OkHttp's route retries).
+     */
+    val probeClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .callTimeout(10, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(false)
+            .build()
+    }
+
+    /** Suspends on the call and cancels it when the coroutine is cancelled (so withTimeout works). */
+    suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
+        enqueue(object : Callback {
+            override fun onResponse(call: Call, response: Response) {
+                if (cont.isActive) cont.resume(response) else response.close()
+            }
+
+            override fun onFailure(call: Call, e: IOException) {
+                if (cont.isActive) cont.resumeWithException(e)
+            }
+        })
+        cont.invokeOnCancellation { runCatching { cancel() } }
     }
 }

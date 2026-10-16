@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.widget.Toast
+import com.sus7898.pocketrisu.R
 import com.sus7898.pocketrisu.log.AppLog
 
 /** Receives PackageInstaller session status; forwards the system confirmation dialog when required. */
@@ -27,7 +28,12 @@ class InstallReceiver : BroadcastReceiver() {
             }
             else -> {
                 AppLog.e(TAG, "install failed status=$status message=$message")
-                Toast.makeText(context, "업데이트 설치 실패: ${message ?: status}", Toast.LENGTH_LONG).show()
+                // One UI's verifier (Auto Blocker / Play Protect) rejects the first self-update attempt
+                // and lets the second through (docs/TROUBLESHOOTING.md T-8, T-10).
+                val verifierBlocked = message?.contains("VERIFICATION", ignoreCase = true) == true ||
+                    message?.contains("ABORTED", ignoreCase = true) == true
+                val text = if (verifierBlocked) context.getString(R.string.update_blocked_retry_hint) else "업데이트 설치 실패: ${message ?: status}"
+                Toast.makeText(context, text, Toast.LENGTH_LONG).show()
             }
         }
     }

@@ -83,6 +83,23 @@
   두 번째 `database.bin` 읽기는 PocketRisu 코드상 **전체 쓰기(full write) 직후의 기준선 재확인**(`globalApi.svelte.ts` `[Save] … baseline re-seed`)에서 일어난다 → 부팅 뒤 패치 저장이 거부되어(`[Save] Patch hash mismatch` / `Patch rejected`) **100MB+ DB 전체를 업로드**했고, 서버가 그걸 받아 디코드·재조립·저장하는 동안(단일 스레드) 채팅 요청이 멈췄다는 가설이 가장 유력. 이전 Chrome의 "전송 데이터 100MB"도 다운로드만이 아니라 **매번 업로드**였을 가능성.
   확인용으로 앱이 `POST /api/write key=… len=…`·`/api/patch len=…`과 웹 콘솔의 `[Save] …` 경고를 기록하도록 변경(dev.5). 서버 쪽은 `docker logs`에서 `[Patch] Hash mismatch for database/database.bin` 또는 `[Write]` 줄을 찾으면 확정.
   재시도 후 25초 만의 `Failed to fetch`는 역방향 프록시(Synology nginx) 타임아웃으로 연결이 끊긴 것으로 보임 — 서버 응답이 프록시 한도보다 오래 걸린다는 뜻이라 역시 서버 지연의 증거.
+- **dev.5 (15:13~15:15, 쓰기 요청 기록 추가 후)**: 채팅 3개(`1f31be28/1`, `0d840f92/0`, `76fe045e/0`)가 **재시도 없이 정상**으로 열림. `POST write key=database/database.bin`은 **없었음** → 이 세션에서는 전체 업로드 가설이 성립하지 않음. 쓰기는 `POST patch`(여러 번)·`chat-content save delta=true`·`plugin-storage` 뿐 = 정상 패턴. 다만 부트스트랩→홈이 **53초**(이전 13~16초)로 느렸고, 직전(15:02~15:06)에 서버 연결 자체가 4분간 실패(T-9)했으므로 **네트워크 경로(공인 IP/NAT 루프백)** 쪽 가능성이 커짐.
+- **플러그인 발견**: `[WygLore Leaf 3.1.0] gzip 마이그레이션 3회 시도 후 자동 skip. 옛 plain payload가 큰 환경(78MB+)…` — WygLore 플러그인이 **78MB+ 옛 데이터**를 plugin-storage에 들고 있어 매 부팅마다 읽고(`read key=plugin-storage/ d2wu…` = `wl.*` 키들) 마이그레이션을 시도한다. 부팅·홈 지연과 서버 부하의 큰 몫일 수 있음. 플러그인 자체 안내: "옮기기·복구 탭 → 백업·정리 → [옛 잔류·대용량·미연결 정리] → [저장 사용량 확인]에서 삭제(PC 권장)" 또는 응급 `localStorage.setItem("wl.disable","1")`.
+- 현재 판단: 지연 원인 후보는 ① 네트워크 경로(T-9 참고) ② 서버 단일 스레드 정지(패치/백업/대용량 플러그인 저장소) ③ WygLore 78MB 페이로드. 앱 쪽 계측(M2)으로 ①②를 가르고, ③은 사용자가 정리하면 바로 비교 가능.
+
+## T-9. 앱 실행 후 44초 동안 빈 화면, 그 뒤 `mode=server-ui (server version unknown)`
+- 발생: 2026-10-16 15:12~15:13, dev.5, S26. 직전 15:02~15:06에는 `GET /api/update-check failed after 271611ms — ConnectException … :443`(서버 4분 넘게 연결 불가).
+- 증상: `App start 15:12:24` → `server reachable 15:13:08`(44초) → `mode=server-ui (server version unknown)`. 서버 확인은 결국 성공했는데 모드 판정은 "unknown"으로 끝나고, 그 44초 동안 화면이 비어 있었음.
+- 원인: ① 서버 확인이 `OkHttp execute()`(블로킹)라 `withTimeoutOrNull(6초)`가 취소 신호를 보내도 블로킹 호출이 끝날 때까지 돌아오지 못함 → 6초 제한이 무력. ② 기본 클라이언트의 경로 재시도(`retryOnConnectionFailure`)로 연결 실패가 271초까지 늘어짐. ③ 타임아웃이 지난 뒤 성공해도 결과는 버려져 "unknown".
+- 해결: `Call.await()`(enqueue + 취소 시 `call.cancel()`) + 전용 `probeClient`(connect 5s / read 8s / call 10s, 재시도 없음). 서버에 못 닿으면 **마지막으로 확인된 서버 버전(7일 이내)으로 번들 모드를 시작**하고, 첫 `/api` 응답이 오면 백그라운드로 버전을 재확인해 다르면 서버 UI로 전환(실패 횟수에 넣지 않음). 서버가 죽어 있으면 서버 UI도 못 뜨므로 번들로 시작하는 쪽이 항상 유리.
+- 재발 방지: 네트워크 호출은 전부 `await()`로; 블로킹 `execute()`는 가로채기 층(응답 스트리밍) 외에는 쓰지 않는다.
+- 참고: 서버 주소가 **공인 IP(125.x)** 로 해석됨. 집 Wi-Fi에서 공인 IP로 접근하면 공유기의 NAT 루프백을 타는데, 일부 공유기는 이 경로가 불안정해 간헐적으로 연결이 끊기거나 수십 초 멈춘다. 채팅 열기 30~120초 지연의 일부가 서버가 아니라 **이 네트워크 경로**일 가능성이 있다 — Synology DDNS 대신 내부 IP/`*.local`을 쓰는 Wi-Fi 전용 주소를 두거나, Tailscale로 접속해 비교해 볼 것.
+
+## T-10. 자체 업데이트 첫 시도가 `INSTALL_FAILED_VERIFICATION_FAILURE: Install not allowed for file:///data/app/vmdl….tmp`
+- 발생: 2026-10-16 15:12, dev.4 → dev.5. T-8처럼 **첫 시도 실패, 두 번째 성공**.
+- 원인: One UI의 설치 검증(Auto Blocker 또는 Play 프로텍트)이 첫 세션을 거부. 두 번째 시도는 사용자가 경고를 넘기거나 검증 결과가 캐시되어 통과하는 것으로 보임(기기 정책, 앱에서 제어 불가).
+- 해결: 실패 메시지에 VERIFICATION/ABORTED가 있으면 "한 번 더 누르면 보통 통과" 안내 토스트. 재시도 시 같은 크기의 APK가 있으면 재다운로드 없이 검증(SHA-256·서명)만 다시 하고 설치.
+- 재발 방지: Samsung 설정 → 보안 → Auto Blocker를 끄면 첫 시도에 통과할 가능성이 큼(사용자 선택).
 
 ## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패
 - 발생: 2026-10-16 14:58, S26 Ultra(One UI, Android 17), dev.2 → dev.4 첫 시도. 두 번째 시도는 성공.

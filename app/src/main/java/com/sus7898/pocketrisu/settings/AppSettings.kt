@@ -23,6 +23,23 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_LAST_SERVER_INFO, null)
         set(value) = prefs.edit { putString(KEY_LAST_SERVER_INFO, value) }
 
+    /** Server version from the last successful probe, with its time; lets a launch start bundled while offline (T-9). */
+    val lastServerVersion: String? get() = prefs.getString(KEY_LAST_SERVER_VERSION, null)
+    val lastServerVersionAt: Long get() = prefs.getLong(KEY_LAST_SERVER_VERSION_AT, 0L)
+
+    fun rememberServer(version: String, deploymentType: String) {
+        lastServerInfo = "version $version (deploymentType=$deploymentType)"
+        prefs.edit {
+            putString(KEY_LAST_SERVER_VERSION, version)
+            putLong(KEY_LAST_SERVER_VERSION_AT, System.currentTimeMillis())
+        }
+    }
+
+    /** __PATCH_SYNC__ as last read from the server's index.html; a server setting, so stable across launches. */
+    var lastPatchSync: Boolean?
+        get() = if (prefs.contains(KEY_LAST_PATCH_SYNC)) prefs.getBoolean(KEY_LAST_PATCH_SYNC, false) else null
+        set(value) = prefs.edit { if (value == null) remove(KEY_LAST_PATCH_SYNC) else putBoolean(KEY_LAST_PATCH_SYNC, value) }
+
     /** false = stable releases only (default); true = follow the rolling nightly pre-release. */
     var nightlyChannel: Boolean
         get() = prefs.getBoolean(KEY_NIGHTLY, false)
@@ -65,6 +82,11 @@ class AppSettings(context: Context) {
         private const val KEY_SERVER_URL = "serverUrl"
         private const val KEY_INCLUDE_HOST = "includeHostInExport"
         private const val KEY_LAST_SERVER_INFO = "lastServerInfo"
+        private const val KEY_LAST_SERVER_VERSION = "lastServerVersion"
+        private const val KEY_LAST_SERVER_VERSION_AT = "lastServerVersionAt"
+        private const val KEY_LAST_PATCH_SYNC = "lastPatchSync"
+        /** A cached server version older than this is not trusted for the bundle gate. */
+        const val CACHED_SERVER_VERSION_MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
         private const val KEY_NIGHTLY = "nightlyChannel"
         private const val KEY_LAST_UPDATE_CHECK = "lastUpdateCheckMs"
         private const val KEY_BUNDLE_ENABLED = "bundleEnabled"

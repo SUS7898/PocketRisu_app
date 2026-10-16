@@ -51,6 +51,7 @@
     <string name="bundle_fallback_toast">내장 UI 문제로 서버 UI로 전환했습니다 (%1$s)</string>
     <string name="settings_section_app">앱 정보</string>
     <string name="settings_app_info">버전 %1$s (code %2$d, %3$s)\n검증된 서버 버전 %4$s</string>
+    <string name="update_blocked_retry_hint">시스템 검증(Auto Blocker/Play 프로텍트)이 설치를 막았습니다. \'다운로드 후 설치\'를 한 번 더 누르면 보통 통과합니다.</string>
     <string name="update_available_toast">앱 업데이트 %1$s 있음 — 설정 · 업데이트에서 설치</string>
 
     <!-- Diagnostics -->

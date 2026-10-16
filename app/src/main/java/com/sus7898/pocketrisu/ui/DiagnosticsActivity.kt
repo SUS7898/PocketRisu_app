@@ -68,12 +68,8 @@ class DiagnosticsActivity : AppCompatActivity() {
         // (docs/TROUBLESHOOTING.md T-4).
         serverVersionLine = settings.lastServerInfo?.let { "$it [cached]" }
         lifecycleScope.launch {
-            serverVersionLine = ServerProbe.probe(base).fold(
-                onSuccess = {
-                    val line = "version ${it.version} (deploymentType=${it.deploymentType})"
-                    settings.lastServerInfo = line
-                    line
-                },
+            serverVersionLine = ServerProbe.probe(base, settings).fold(
+                onSuccess = { "version ${it.version} (deploymentType=${it.deploymentType})" },
                 onFailure = { "unreachable: ${it.message ?: it.javaClass.simpleName}" },
             )
             renderHeader()
