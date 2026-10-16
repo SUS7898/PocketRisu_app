@@ -49,6 +49,11 @@ class AppSettings(context: Context) {
         get() = prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L)
         set(value) = prefs.edit { putLong(KEY_LAST_UPDATE_CHECK, value) }
 
+    /** Keep-alive foreground service while the app is open (T-12). Default on. */
+    var keepAlive: Boolean
+        get() = prefs.getBoolean(KEY_KEEP_ALIVE, true)
+        set(value) = prefs.edit { putBoolean(KEY_KEEP_ALIVE, value) }
+
     /** Bundled UI mode (docs/DESIGN.md §4). Default on; the version gate decides per launch. */
     var bundleEnabled: Boolean
         get() = prefs.getBoolean(KEY_BUNDLE_ENABLED, true)
@@ -89,6 +94,7 @@ class AppSettings(context: Context) {
         const val CACHED_SERVER_VERSION_MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
         private const val KEY_NIGHTLY = "nightlyChannel"
         private const val KEY_LAST_UPDATE_CHECK = "lastUpdateCheckMs"
+        private const val KEY_KEEP_ALIVE = "keepAlive"
         private const val KEY_BUNDLE_ENABLED = "bundleEnabled"
         private const val KEY_BUNDLE_DISABLED_FOR = "bundleDisabledForVersion"
         private const val KEY_BUNDLE_FAILS = "bundleFailures"

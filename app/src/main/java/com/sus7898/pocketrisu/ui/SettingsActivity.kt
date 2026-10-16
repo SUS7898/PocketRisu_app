@@ -1,8 +1,10 @@
 package com.sus7898.pocketrisu.ui
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.View
 import android.widget.Toast
@@ -13,6 +15,7 @@ import com.sus7898.pocketrisu.R
 import com.sus7898.pocketrisu.bundle.BundleRepository
 import com.sus7898.pocketrisu.bundle.UiModeState
 import com.sus7898.pocketrisu.databinding.ActivitySettingsBinding
+import com.sus7898.pocketrisu.keepalive.KeepAliveService
 import com.sus7898.pocketrisu.log.AppLog
 import com.sus7898.pocketrisu.settings.AppSettings
 import com.sus7898.pocketrisu.update.UpdateChecker
@@ -48,6 +51,15 @@ class SettingsActivity : AppCompatActivity() {
             binding.installButton.visibility = View.GONE
             binding.updateStatus.text = ""
         }
+        binding.keepAliveSwitch.isChecked = settings.keepAlive
+        binding.keepAliveSwitch.setOnCheckedChangeListener { _, checked ->
+            settings.keepAlive = checked
+            AppLog.i("KeepAlive", "setting keepAlive=$checked")
+            if (checked) KeepAliveService.start(this) else KeepAliveService.stop(this)
+        }
+        binding.batteryButton.setOnClickListener { requestBatteryExemption() }
+        renderBattery()
+
         binding.bundleSwitch.isChecked = settings.bundleEnabled
         binding.bundleSwitch.setOnCheckedChangeListener { _, checked ->
             settings.bundleEnabled = checked
@@ -67,6 +79,22 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         renderServer()
+        renderBattery()
+    }
+
+    private fun isBatteryExempt(): Boolean =
+        getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+
+    private fun renderBattery() {
+        val exempt = isBatteryExempt()
+        binding.batteryButton.isEnabled = !exempt
+        binding.batteryButton.text = getString(if (exempt) R.string.settings_battery_exempt_done else R.string.settings_battery_exempt)
+    }
+
+    @SuppressLint("BatteryLife")
+    private fun requestBatteryExemption() {
+        AppLog.i("KeepAlive", "requesting battery optimization exemption")
+        startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
     }
 
     private fun renderServer() {

@@ -1,9 +1,12 @@
 package com.sus7898.pocketrisu.ui
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
@@ -38,6 +41,7 @@ import com.sus7898.pocketrisu.bundle.UiMode
 import com.sus7898.pocketrisu.bundle.UiModeState
 import com.sus7898.pocketrisu.databinding.ActivityMainBinding
 import com.sus7898.pocketrisu.intercept.RequestObserver
+import com.sus7898.pocketrisu.keepalive.KeepAliveService
 import com.sus7898.pocketrisu.log.AppLog
 import com.sus7898.pocketrisu.net.Http
 import com.sus7898.pocketrisu.net.ServerProbe
@@ -108,6 +112,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        startKeepAliveIfEnabled()
         lifecycleScope.launch {
             val mode = decideMode(base)
             UiModeState.current = mode
@@ -234,6 +239,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * T-12: the renderer holding the decoded database was killed while the app was in the
+     * background (renderer gone, crashed=false) and the process itself was restarted twice; each
+     * time the whole 100MB bootstrap ran again. A foreground service keeps the process (and with
+     * RENDERER_PRIORITY_IMPORTANT the renderer) off the top of the kill list.
+     */
+    private fun startKeepAliveIfEnabled() {
+        if (!settings.keepAlive) return
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            // The service works without the permission; the notification is simply hidden.
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        KeepAliveService.start(this)
+    }
+
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        AppLog.i(TAG, "notification permission granted=$granted")
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         webView?.saveState(outState)
@@ -241,6 +267,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         handler.removeCallbacks(healthCheck)
+        if (isFinishing) KeepAliveService.stop(this)
         webView?.let {
             binding.webViewContainer.removeView(it)
             it.destroy()

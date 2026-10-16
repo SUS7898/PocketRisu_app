@@ -5,6 +5,11 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Self-update: install the verified APK downloaded from GitHub Releases (docs/DESIGN.md §3.6). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Keep-alive foreground service: survive app switching without a reload (docs/TROUBLESHOOTING.md T-12). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name=".App"
@@ -52,6 +57,15 @@
         <receiver
             android:name=".update.InstallReceiver"
             android:exported="false" />
+
+        <service
+            android:name=".keepalive.KeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the PocketRisu web session (100MB+ in-memory database) alive while the user switches apps, so returning does not reload everything." />
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"

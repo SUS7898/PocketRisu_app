@@ -105,7 +105,13 @@
 ### 휴대폰 스크린샷 — 시스템 바 겹침 (T-11)
 - 웹 UI가 상태 표시줄·제스처 바 밑에 깔림 → 루트에 systemBars+displayCutout+ime 인셋 패딩. 키보드 겹침도 같이 해결. 보조 화면은 `fitsSystemWindows`.
 
+### 실기기 7차 (522KB 로그, dev.5~dev.7) — 백그라운드 복귀 시 재접속 (T-12), 플러그인 읽기 폭주 (T-13)
+- `renderer gone crashed=false priority=2` + 앱 프로세스 재시작 2회 → `KeepAliveService`(specialUse 포그라운드) + 배터리 최적화 예외 버튼 + PocketRisu `nodeOnlyRestoreLastChat` 안내.
+- `wl.web.v1` 6,370회/10분 읽기 폭주(WygLore Leaf 3.1.0) 발견. 230회 patch, db.bin 전체 쓰기 0회, `[Save] Patch conflict with a foreign revision, rebasing` 1회(다른 기기/탭 동시 사용?).
+- 번들 모드 재시작 2회 모두 `healthy`, page finished 0.2~0.4초.
+
 ### 미검증 / 다음
+- T-12: keep-alive 켠 상태에서 앱 전환 후 복귀 시 `renderer gone` 재발 여부.
 - T-11 실기기 확인(세로/가로/키보드/분할 화면).
 - 사용자 조치 권고: WygLore 옛 데이터 정리, Wi-Fi에서 내부 주소/Tailscale로 접속 비교.
 - dev.5 로그에서 `POST write key=database/database.bin len=…` 또는 `[Save] Patch hash mismatch` 확인 → 전체 쓰기 가설 확정.

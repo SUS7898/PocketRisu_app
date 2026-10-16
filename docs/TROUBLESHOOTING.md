@@ -108,6 +108,29 @@
 - 같이 점검한 것(같은 뿌리): 하단 제스처 바 겹침(해결), 키보드 겹침(해결), 가로 모드 카메라 홀(해결), 분할 화면(인셋이 창 기준이라 그대로 적용), 태블릿 S7+(3버튼 내비게이션이어도 같은 코드로 처리).
 - 남은 것: 앱 메뉴 손잡이(우측 가장자리 14dp)가 PocketRisu 목록의 우측 `⋮` 버튼과 가까워 오터치 가능성 — 사용해 보고 불편하면 위치를 바꾸거나 길게 눌러 숨기기 추가.
 
+## T-12. 다른 앱을 열거나 홈 화면에 나갔다 오면 처음부터 다시 접속함
+- 발생: 2026-10-16 16:50~16:53, S26 Ultra, dev.5→dev.7. 522KB 로그 분석.
+- 증상(로그):
+  ```
+  16:50:55.824 E/Shell renderer gone crashed=false priority=2   ← WebView 렌더러가 '크래시'가 아니라 시스템에 의해 종료됨(백그라운드 메모리 회수)
+  16:50:55.847 page finished → 16:50:56.653 read key=database/database.bin   ← 셸이 복구했지만 100MB 부트스트랩부터 다시
+  16:51:55.846 I/App start …  / 16:53:04.453 I/App start …                   ← 앱 프로세스 자체도 두 번 재시작
+  ```
+  `priority=2`(IMPORTANT) 상태에서도 죽었으므로 WebView 우선순위 설정만으로는 부족. 디코드된 100MB+ DB를 든 렌더러는 메모리 회수 1순위이고, One UI는 백그라운드 앱을 공격적으로 정리한다.
+- 해결(앱):
+  1. `KeepAliveService` — 앱이 열려 있는 동안 조용한 포그라운드 알림을 띄우는 서비스(`specialUse`). 프로세스 중요도가 "포그라운드 서비스"로 올라가 LMK 대상에서 멀어지고, `RENDERER_PRIORITY_IMPORTANT`와 합쳐져 렌더러도 보호된다. 설정 "백그라운드 유지"(기본 on), 알림 권한 요청(거부해도 서비스는 동작).
+  2. 설정 "배터리 최적화 예외 허용" 버튼(`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`). One UI에서는 추가로 설정 → 배터리 → 백그라운드 사용 제한 → **절전 예외 앱**에 추가하고, 최근 앱 화면에서 앱을 **잠금**하면 더 안전.
+  3. 그래도 죽었을 때의 복구: PocketRisu 자체에 **마지막 캐릭터 복원** 기능이 있다(`nodeOnlyRestoreLastChat`, `localStorage 'risu-last-active-character'`, 부트 후 `changeChar`). PocketRisu 설정에서 켜 두면 재접속 뒤 홈이 아니라 마지막 캐릭터로 돌아간다. (앱 패치 불필요.)
+- 한계: 메모리가 정말 부족하면 포그라운드 서비스도 죽는다. 근본은 렌더러 메모리 = DB 크기이므로 캐릭터 비활성화로 DB를 줄이는 것이 가장 효과적.
+- 재발 방지: `renderer gone crashed=false`가 로그에 남으면 이 항목. `priority` 값과 함께 keep-alive 설정 상태를 진단 머리에 표시.
+
+## T-13. WygLore Leaf 플러그인이 `wl.web.v1` 키를 초당 12회 읽음 (10분간 6,370회)
+- 발생: 2026-10-16 15:26~15:35, 서버 UI 모드/번들 모드 공통. 로그의 `I/Intercept read key=plugin-storage/ d2wud2ViLnYx…`(= `wl.web.v1`) 6,370건, 15:35 이후 1~3회/분으로 진정.
+- 영향: 매 읽기가 NAS로의 HTTP 왕복 + 서버 SQLite 조회. 10분간 서버·네트워크·기기 모두 점유 → 그 직전(15:22~15:24)의 `asset-manifests` 30초 무응답·연결 타임아웃과 시기적으로 겹친다. T-7의 "서버가 막힘" 원인 후보 중 하나.
+- 원인: 플러그인 내부(3.1.0, "gzip 마이그레이션 3회 시도" 경고와 같은 세션). 앱이 막을 수는 없고 막아서도 안 된다(플러그인 데이터 무결성).
+- 조치(사용자): WygLore Leaf를 3.2.0으로 올렸으면 재발 여부 확인 → 로그에서 `read key=plugin-storage/ d2wud2ViLnYx` 가 분당 수백 건이면 플러그인을 끄고 비교. 옛 78MB 페이로드 정리는 T-7 참고.
+- 앱 측: 진단 화면에 "plugin-storage 읽기 분당 건수" 집계를 추가해 재발을 바로 보이게 함(마일스톤 2 계측에 포함).
+
 ## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패
 - 발생: 2026-10-16 14:58, S26 Ultra(One UI, Android 17), dev.2 → dev.4 첫 시도. 두 번째 시도는 성공.
 - 원인: `SessionParams.setRequireUserAction(USER_ACTION_NOT_REQUIRED)`를 요청하면 One UI가 "알 수 없는 출처" 패키지의 자체 업데이트를 세션 단계에서 거부함(사용자 확인 창이 뜬 뒤 0.8초 만에 ABORTED).
