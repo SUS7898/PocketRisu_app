@@ -148,7 +148,12 @@
 - 메인 모델 job 400 → CORS → proxy 실패 → 재시도 체인으로 턴당 1~3분 허비(T-18). 앱 밖.
 - 클립보드 복사 거부(T-17) → `ClipboardBridge`.
 
+### T-18 확정 — 요청 로그 `{"error":"No auth header"}`
+- 메인 모델 job 400의 정체는 Vertex가 아니라 **빈 `risu-auth`**. `authFetch`가 인증 오류 후 `cachedJwt`를 비우면, `createAuth()`를 직접 쓰는 job/proxy/Vertex 토큰 호출이 `''`를 받아 실패. 서버 정지(54~167초) 뒤 처리되며 JWT(5분)가 만료된 것이 방아쇠.
+- 패치 040: 갱신 여유 30초→2분, 토큰 없으면 `/api/test_auth`(세션 쿠키)로 즉시 재발급. 번들 패치 4개.
+
 ### 미검증 / 다음
+- dev.14: `[ModelJob] job creation rejected ( 400 )` 소멸 여부, `[Storage] JWT re-issued from the session cookie` 출현 여부.
 - T-17: 복사 동작 확인. T-18: PocketRisu 요청 로그에서 400 본문 확인 → 제보.
 - Lightboard `concurrent` 2~3 설정 후 12장 소요 비교(68초 기준).
 - 삽화 병렬화 패치(040) — Lightboard 설정으로 대체, 보류: NAI 동시 2~3장, 429 시 직렬 복귀.

@@ -37,6 +37,7 @@ gh api "repos/PocketRisu/PocketRisu/compare/v1.14.0...v1.15.0" \
 | C6a | 패치 010 (첫 바이트 타임아웃 120초) | `const FIRST_BYTE_TIMEOUT_MS = 30_000` 한 줄 | `src/ts/storage/nodeStorage.ts` 상단 | 상수가 옮겨지면 패치 재생성; upstream이 직접 늘리면 패치 삭제 |
 | C6b | 패치 020 (앱 안에서 강제 flush 생략) | `flushImmediate()` 안의 `void flushServerDbKeepalive()` 호출, 전역 `__POCKETRISU_APP_BUNDLE__`(BundleServer가 index.html에 주입) | `src/ts/globalApi.svelte.ts` ~800 | 함수가 옮겨지면 패치 재생성; upstream이 flush를 비차단으로 바꾸면 패치 삭제 검토 |
 | C6c | 패치 030 (앱 다운로드 브리지) | `downloadFile(name, dat)` 시그니처, 포트 이름 `PocketRisuAppDownload` | `src/ts/globalApi.svelte.ts` ~215 | 함수가 바뀌면 패치 재생성; DownloadBridge의 페이로드 형식과 맞출 것 |
+| C6d | 패치 040 (JWT 재발급·조기 갱신) | `createAuth()`의 30초 여유, `_doRefreshToken()` 본문, `/api/test_auth`가 쿠키로 `{status:'success', token}`을 돌려주는 동작 | `src/ts/storage/nodeStorage.ts` ~231·~280, `server.cjs /api/test_auth` | upstream이 `createAuth` 직접 호출자를 `checkAuth` 경유로 바꾸거나 빈 헤더 반환을 고치면 패치 삭제 |
 | C7 | 읽기 전용 디코더 | `RISUSAVE` 매직 11B, 버전 7(msgpack)·8(zlib)·9(gzip), msgpackr `useRecords:false`, `int64AsType:'number'` | `risuSave.ts` 상단 | 디코더 버전 분기 추가. **새 버전 바이트가 나오면 디코더는 자동 비활성(폴백)** |
 | C8 | 채팅 쓰기 후 캐시 무효화 | 쓰기 경로 = `POST /api/chat-content/:chaId/:idx`, `POST /api/patch`, `POST /api/write` | `server.cjs` 해당 라우트 | 무효화 트리거 경로 목록 갱신 |
 | C9 | 삽화 생성 직후 프리페치 | 삽화 업로드 경로와 키 형식 (`/api/write` + `file-path`=hex(`inlay/...`)) | `stableDiff.ts`, `globalApi.svelte.ts` 업로드부 | 트리거 B 경로 수정 |

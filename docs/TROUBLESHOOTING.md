@@ -184,7 +184,13 @@
   ```
   두 번째 턴은 job 생성에 **167초**(04:33:44 → 04:36:31) 걸린 뒤 400.
 - 원인(추정): ① 서버 `createJob`의 400 사유는 `chatId 없음 / target URL 비정상 / method≠POST / body가 문자열 아님` 네 가지뿐인데, Vertex AI(`aiplatform.googleapis.com`) 어댑터 요청이 이 중 하나에 걸리는 것으로 보임(어댑터가 본문을 객체로 보내거나 URL 형식). ② 400이 즉시가 아니라 54~167초 뒤에 오는 것은 서버 단일 스레드가 그 시간 동안 막혀 있었다는 뜻(T-7과 같은 뿌리). ③ 거부 후 클라이언트는 브라우저 직접 요청(Vertex는 CORS 불허 → 실패) → `/proxy2`(서비스계정 토큰 문제로 실패 추정) → 다시 job… 순으로 돌아 결국 성공하지만 **턴당 1~3분을 허비**.
-- 앱에서 할 수 있는 것: 없음(PocketRisu 어댑터·서버 로직). 확인 방법: PocketRisu 설정 → 요청 로그에서 400 본문(`error` 문자열)을 보면 사유가 바로 나온다. 그 문자열과 이 타임라인으로 PocketRisu에 제보할 것. 임시 우회: 메인 모델을 Vertex 대신 Gemini API(generativelanguage) 경로로 두면 job 경로가 정상 동작할 가능성이 큼(이전 세션에서 `model-jobs` 스트림이 정상이던 모델이 그 경로였는지 확인 필요).
+- **확정 (사용자가 요청 로그에서 확인)**: 400 본문은 `{"error":"No auth header"}` — Vertex와 무관하게 **`risu-auth` 헤더가 비어 있었다**. 경로:
+  1. `authFetch`가 인증 오류(예: 서버 정지 뒤에 처리돼 "Token Expired")를 받으면 `cachedJwt = null`로 비우고 `runAuthCheck()`로 복구를 시작한다(`nodeStorage.ts authFetchOnce`).
+  2. 그 사이 `createAuth()`를 **직접** 쓰는 호출자(모델 job 생성, `/proxy2`, Vertex 토큰 엔드포인트)는 `_doRefreshToken()` → 토큰이 없으니 `risu-auth: ''`로 refresh 시도 → 실패 → **빈 문자열을 반환** → 서버 "No auth header" 400.
+  3. 복구는 `authFetch` 계열이 `/api/test_auth`(세션 쿠키로 새 토큰)를 부른 뒤에야 되므로, 그동안 job→직접(CORS)→proxy 체인이 전부 실패하고 다음 재시도에서야 성공한다.
+  4. 54~167초 지연은 서버 단일 스레드 정지(채팅 저장 → 5초 뒤 100MB DB 재조립·인코딩) 뒤에 요청이 처리되면서 그 사이 JWT(5분)가 만료된 것. T-7과 같은 뿌리.
+- 조치: `patches/040-auth-token-recovery.patch` (번들 모드) — ① 토큰 갱신 여유를 30초→**2분**으로(서버가 1분 넘게 붙들어도 처리 시점에 살아 있도록) ② 토큰이 없으면 `''`를 돌려주는 대신 **세션 쿠키로 `/api/test_auth`에서 즉시 재발급**. 서버 UI 모드에는 적용 불가. 확인: 로그에 `[ModelJob] job creation rejected ( 400 )`가 사라지고, 있더라도 `[Storage] JWT re-issued from the session cookie` 뒤에 바로 성공해야 함.
+- upstream 제보 후보: `_doRefreshToken`이 빈 헤더를 돌려주는 문제 + `createAuth()` 직접 호출자가 `checkAuth()`를 거치지 않는 문제.
 - 보조 모델(3.8 Flash)도 같은 400 → 직접 경로로 간다(실기기 10차). 즉 **현재 생성 요청 대부분이 서버 job을 타지 못하고** 브라우저 직접 경로로 처리되고 있어, 앱이 백그라운드로 가면 끊긴다 — keep-alive가 필수인 이유.
 
 ## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패

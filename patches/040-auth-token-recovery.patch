@@ -1,0 +1,60 @@
+diff --git a/src/ts/storage/nodeStorage.ts b/src/ts/storage/nodeStorage.ts
+index f516153..4dada28 100644
+--- a/src/ts/storage/nodeStorage.ts
++++ b/src/ts/storage/nodeStorage.ts
+@@ -230,7 +230,10 @@ export class NodeStorage{
+ 
+     async createAuth(){
+         const now = Date.now()
+-        if (this.cachedJwt && this.cachedJwt.expiresAt - now > 30_000) {
++        // [PocketRisu_app patch 040] Refresh with 2 minutes left instead of 30 seconds: the NAS can hold
++        // a request for over a minute (docs/TROUBLESHOOTING.md T-7/T-18) and the server checks
++        // expiry when it finally processes the request, not when it was sent.
++        if (this.cachedJwt && this.cachedJwt.expiresAt - now > 120_000) {
+             return this.cachedJwt.token
+         }
+         const token = await this._refreshToken()
+@@ -278,14 +281,35 @@ export class NodeStorage{
+     }
+ 
+     private async _doRefreshToken(): Promise<string> {
+-        const res = await fetch('/api/token/refresh', {
+-            method: 'POST',
+-            headers: { 'risu-auth': this.cachedJwt?.token ?? '' }
+-        })
+-        if (res.ok) {
+-            const data = await res.json()
+-            this.cachedJwt = { token: data.token, expiresAt: Date.now() + 5 * 60 * 1000 }
+-            return data.token
++        if (this.cachedJwt?.token) {
++            const res = await fetch('/api/token/refresh', {
++                method: 'POST',
++                headers: { 'risu-auth': this.cachedJwt.token }
++            })
++            if (res.ok) {
++                const data = await res.json()
++                this.cachedJwt = { token: data.token, expiresAt: Date.now() + 5 * 60 * 1000 }
++                return data.token
++            }
++        }
++        // [PocketRisu_app patch 040] No usable token — it was cleared after an auth error (a request
++        // that sat behind a server stall until the JWT expired), or never issued on this page. The
++        // old code returned '' here, so every direct caller of createAuth() (model jobs, /proxy2,
++        // the Vertex token endpoint) then failed with "No auth header" until some authFetch ran
++        // runAuthCheck (docs/TROUBLESHOOTING.md T-18). Mint a token from the session cookie
++        // instead: /api/test_auth answers { status: 'success', token } when the cookie is valid.
++        try {
++            const res = await fetch('/api/test_auth', { credentials: 'same-origin' })
++            if (res.ok) {
++                const data = await res.json()
++                if (data?.status === 'success' && typeof data.token === 'string' && data.token) {
++                    this.cachedJwt = { token: data.token, expiresAt: Date.now() + 5 * 60 * 1000 }
++                    console.warn('[Storage] JWT re-issued from the session cookie')
++                    return data.token
++                }
++            }
++        } catch {
++            // fall through: the caller gets whatever we have, exactly as before
+         }
+         return this.cachedJwt?.token ?? ''
+     }
