@@ -292,7 +292,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread { markApiSeen() }
             }
             // Milestone 1 observation; the tee/measure layer replaces this (DESIGN.md §3.2).
-            if (request.method == "GET") RequestObserver.observe(request)
+            RequestObserver.observe(request)
             return null
         }
 
@@ -330,9 +330,15 @@ class MainActivity : AppCompatActivity() {
 
     private inner class ShellWebChromeClient : WebChromeClient() {
         override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
-            // Only errors, truncated: console output can echo page data.
-            if (consoleMessage.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
-                AppLog.w("Shell", "console: ${consoleMessage.message().take(300)} (${consoleMessage.sourceId().substringAfterLast('/')}:${consoleMessage.lineNumber()})")
+            // Errors always; warnings only when PocketRisu tagged them ("[Save] …", "[Storage] …"),
+            // which is where patch rejections and full-write fallbacks are reported (T-7).
+            // Truncated: console output can echo page data.
+            val level = consoleMessage.messageLevel()
+            val msg = consoleMessage.message()
+            val keep = level == ConsoleMessage.MessageLevel.ERROR ||
+                (level == ConsoleMessage.MessageLevel.WARNING && msg.startsWith("["))
+            if (keep) {
+                AppLog.w("Shell", "console[${level.name.lowercase()}]: ${msg.take(300)} (${consoleMessage.sourceId().substringAfterLast('/')}:${consoleMessage.lineNumber()})")
             }
             return true
         }

@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
-import android.os.Build
 import com.sus7898.pocketrisu.log.AppLog
 import com.sus7898.pocketrisu.net.Http
 import kotlinx.coroutines.Dispatchers
@@ -87,13 +86,11 @@ class UpdateInstaller(private val context: Context) {
     /** Hands the verified file to the system installer. Progress continues in [InstallReceiver]. */
     fun install(file: File) {
         val installer = context.packageManager.packageInstaller
+        // Always let the system ask: USER_ACTION_NOT_REQUIRED made One UI abort the session with
+        // "Self update is blocked by unknown source package" (docs/TROUBLESHOOTING.md T-8).
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
             setSize(file.length())
-            if (Build.VERSION.SDK_INT >= 31) {
-                // Honoured only once this app is the installer of record (after its first self-update).
-                setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
-            }
         }
         val sessionId = installer.createSession(params)
         installer.openSession(sessionId).use { session ->

@@ -91,7 +91,13 @@
 - 부트스트랩 `database/database.bin` → 홈 표시까지 **13초**(S26). 플러그인 저장소 6건 읽기 후 chat-content 요청이 **정확히 30.000초 뒤 재시도** = 클라이언트 첫 바이트 타임아웃. 다른 채팅은 즉시 열림 → 서버가 그 시점에 30초+ 막혀 있었음. 상세·가설·확인 방법은 T-7.
 - 첫 패치 `patches/010-chat-first-byte-timeout-120s.patch` 작성(번들 모드 전용). `build-frontend.sh`로 적용·빌드 검증.
 
+### 실기기 5차 (dev.4, 번들 모드 첫 실행) — **C 모드 동작 확인**
+- `mode=bundled v1.14.0 patchSync=true` → `I/Bundle healthy (served 17 bundle files)` → `page finished` **0.2초**(서버 UI 모드 0.8~37초). 부트스트랩→홈 16초(서버 UI 13초와 같은 수준 = 데이터 시간).
+- 자체 업데이트 dev.2→dev.4(26MB): 1차 `INSTALL_FAILED_ABORTED … unknown source package`(T-8), 2차 성공. `USER_ACTION_NOT_REQUIRED` 제거.
+- 채팅 열기: 패치 010대로 120초 대기 후 재시도, 재시도는 25초 뒤 `Failed to fetch`. 요청 3초 전 두 번째 `database.bin` 전체 읽기 관찰 → 전체 쓰기(full write) 가설(T-7 추가 증거). 쓰기 경로·`[Save]` 콘솔 경고 기록 추가.
+
 ### 미검증 / 다음
+- dev.5 로그에서 `POST write key=database/database.bin len=…` 또는 `[Save] Patch hash mismatch` 확인 → 전체 쓰기 가설 확정.
 - T-7 서버 로그 확인(사용자: `docker logs --since 5m risuai-nodeonly`).
 - 번들 모드 실기기: 로그에 `mode=bundled v1.14.0 patchSync=…` → `I/Bundle healthy` 가 나와야 함. 안 나오면 `E/Bundle fallback …` 사유 확인.
 - 캐릭터 첫 진입 53초의 정체 — 새 nightly로 같은 동작 반복 후 로그 (키 이름 포함).

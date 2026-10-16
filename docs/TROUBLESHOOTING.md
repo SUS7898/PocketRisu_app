@@ -69,6 +69,26 @@
   2. 근본: upstream 이슈 후보 — ① `ensureChatStore()`에 진행 중 가드가 없어 재시도가 디코드를 두 번 돌릴 수 있음, ② 지연 저장이 요청 처리를 막음(워커 스레드/비동기 인코딩 필요). 서버 로그로 확정되면 PocketRisu에 제보.
   3. 사용자 측 완화: 캐릭터 비활성화(archive)로 DB를 줄이면 모든 동기 작업이 비례해서 짧아진다.
 - 재발 방지: 이 항목 + UPSTREAM-UPDATE C6에 "첫 바이트 타임아웃 상수 위치" 추가.
+- **추가 증거 (15:01, dev.4 번들 모드 + 패치 010)**:
+  ```
+  14:58:55.422 read key=database/database.bin           ← 부트스트랩
+  14:59:11.583 asset requests n=50                       ← 홈 (16초)
+  14:59:20.274 read key=database/database.bin           ← ★ 두 번째 전체 읽기 (부트스트랩 아님)
+  14:59:23.035 chat-content chaId=1f31be28 idx=0        ← 채팅 열기
+  15:01:23.036 chat-content … idx=0                     ← +120.001초: 패치 010대로 120초 대기 후 재시도
+  15:01:48.356 W/Shell console[error]: TypeError: Failed to fetch (database.svelte-…js)  ← 재시도도 25초 뒤 연결 끊김
+  15:01:50.862 chat-content … idx=1                     ← 다른 채팅은 즉시
+  ```
+  "캐릭터를 열면 채팅을 전부 읽나?" → 아니다. 채팅 본문은 연 것 하나만 `chat-content` 한 건으로 받는다(로그상 한 건). 느린 건 그 한 건의 서버 응답이다.
+  두 번째 `database.bin` 읽기는 PocketRisu 코드상 **전체 쓰기(full write) 직후의 기준선 재확인**(`globalApi.svelte.ts` `[Save] … baseline re-seed`)에서 일어난다 → 부팅 뒤 패치 저장이 거부되어(`[Save] Patch hash mismatch` / `Patch rejected`) **100MB+ DB 전체를 업로드**했고, 서버가 그걸 받아 디코드·재조립·저장하는 동안(단일 스레드) 채팅 요청이 멈췄다는 가설이 가장 유력. 이전 Chrome의 "전송 데이터 100MB"도 다운로드만이 아니라 **매번 업로드**였을 가능성.
+  확인용으로 앱이 `POST /api/write key=… len=…`·`/api/patch len=…`과 웹 콘솔의 `[Save] …` 경고를 기록하도록 변경(dev.5). 서버 쪽은 `docker logs`에서 `[Patch] Hash mismatch for database/database.bin` 또는 `[Write]` 줄을 찾으면 확정.
+  재시도 후 25초 만의 `Failed to fetch`는 역방향 프록시(Synology nginx) 타임아웃으로 연결이 끊긴 것으로 보임 — 서버 응답이 프록시 한도보다 오래 걸린다는 뜻이라 역시 서버 지연의 증거.
+
+## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패
+- 발생: 2026-10-16 14:58, S26 Ultra(One UI, Android 17), dev.2 → dev.4 첫 시도. 두 번째 시도는 성공.
+- 원인: `SessionParams.setRequireUserAction(USER_ACTION_NOT_REQUIRED)`를 요청하면 One UI가 "알 수 없는 출처" 패키지의 자체 업데이트를 세션 단계에서 거부함(사용자 확인 창이 뜬 뒤 0.8초 만에 ABORTED).
+- 해결: 플래그 제거 — 항상 시스템 확인 창을 거친다(탭 한 번). `UpdateInstaller.install`.
+- 재발 방지: 설치 실패는 `E/Update install failed status=… message=…`로 남으므로 로그에서 바로 보인다.
 
 ## T-2. 서버 주소가 http:// 이면 접속 거부
 - 발생: 설계상 의도된 동작

@@ -20,6 +20,10 @@ object RequestObserver {
 
     fun observe(request: WebResourceRequest) {
         val path = request.url.encodedPath ?: return
+        if (request.method != "GET") {
+            observeWrite(request, path)
+            return
+        }
         when {
             path == "/api/read" -> {
                 val key = decodeHexKey(request.requestHeaders["file-path"])
@@ -42,6 +46,27 @@ object RequestObserver {
             }
             path.startsWith("/api/model-jobs") -> AppLog.i(TAG, "model-jobs ${path.removePrefix("/api/model-jobs").take(40)}")
             path.startsWith("/proxy2") -> AppLog.i(TAG, "proxy2 GET (image/aux provider request)")
+        }
+    }
+
+    /**
+     * Writes are what make the single-threaded server busy (T-7): a full database.bin upload or a
+     * patch right after boot can stall every later request. Bodies are invisible here; the key
+     * header and the route are enough to see the pattern.
+     */
+    private fun observeWrite(request: WebResourceRequest, path: String) {
+        val m = request.method
+        when {
+            path == "/api/write" -> AppLog.i(TAG, "$m write key=${shortKey(decodeHexKey(request.requestHeaders["file-path"]))} len=${request.requestHeaders["content-length"] ?: "?"}")
+            path == "/api/patch" -> AppLog.i(TAG, "$m patch len=${request.requestHeaders["content-length"] ?: "?"}")
+            path.startsWith("/api/chat-content/") -> {
+                val parts = path.removePrefix("/api/chat-content/").split('/')
+                AppLog.i(TAG, "$m chat-content save chaId=${parts.getOrNull(0)?.take(8)} idx=${parts.getOrNull(1)} delta=${request.requestHeaders.containsKey("x-chat-base-count")}")
+            }
+            path == "/api/db/flush" || path.startsWith("/api/backup/") || path.startsWith("/api/db/") ->
+                AppLog.i(TAG, "$m ${path.take(40)}")
+            path.startsWith("/api/model-jobs") -> AppLog.i(TAG, "$m model-jobs ${path.removePrefix("/api/model-jobs").take(40)}")
+            path.startsWith("/proxy") -> AppLog.i(TAG, "$m ${path.take(12)} (provider request)")
         }
     }
 
