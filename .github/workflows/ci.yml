@@ -1,5 +1,11 @@
 name: CI
 
+# Every push: unit tests, lint, debug APK (artifact).
+# Push to main additionally builds a SIGNED release APK and publishes it to the rolling
+# "nightly" pre-release, so the newest build is always at
+#   https://github.com/SUS7898/PocketRisu_app/releases/tag/nightly
+# Versioned releases (tags v*) are handled by release.yml and are what the in-app updater follows.
+
 on:
   push:
     branches: ["**"]
@@ -8,11 +14,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  APK_BASENAME: pocketrisu-app
+  APP_ID: com.sus7898.pocketrisu
 
 jobs:
   build:
@@ -60,3 +70,129 @@ jobs:
             app/build/reports/
             app/build/test-results/
           retention-days: 14
+
+  nightly:
+    name: Signed APK → nightly pre-release
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git describe needs the tags
+
+      - name: Version from git describe
+        id: version
+        run: |
+          set -euo pipefail
+          DESC=$(git describe --tags --long --match 'v[0-9]*' 2>/dev/null || echo "v0.0.0-0-g$(git rev-parse --short HEAD)")
+          # v0.1.0-5-gabc1234  ->  tag v0.1.0, 5 commits since, sha abc1234
+          TAG=${DESC%-*-g*}
+          REST=${DESC#"$TAG"-}
+          N=${REST%%-g*}
+          SHA=${REST##*-g}
+          NAME="${TAG#v}"
+          if [ "$N" != "0" ]; then NAME="${NAME}-dev.${N}+${SHA}"; fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Version $NAME"
+
+      - name: Check signing secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for v in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            [ -n "${!v}" ] || { echo "::error::Missing repository secret $v (see README.md > 릴리스)"; exit 1; }
+          done
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-35 build-tools;35.0.0 platform-tools"
+          accept-android-sdk-licenses: true
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          test -s "$RUNNER_TEMP/release.jks"
+
+      - name: Build signed release APK
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease \
+            -PappVersionName="${{ steps.version.outputs.name }}"
+
+      - name: Verify signature and package
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          "$BT/apksigner" verify --verbose --print-certs "$APK" | tee apksigner.txt
+          grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" apksigner.txt
+          "$BT/aapt2" dump badging "$APK" | grep -E "^package:" | tee badging.txt
+          grep -q "name='${APP_ID}'" badging.txt
+          grep -q "versionName='${{ steps.version.outputs.name }}'" badging.txt
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/${APK_BASENAME}-nightly.apk"
+          cp app/build/outputs/mapping/release/mapping.txt "dist/mapping-nightly.txt" || true
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          {
+            echo "자동 빌드 — main 최신 커밋 ($(git rev-parse --short HEAD))"
+            echo
+            echo "- 버전: ${{ steps.version.outputs.name }}"
+            echo "- 커밋: ${{ github.sha }}"
+            echo "- 빌드: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "테스트용 최신 빌드입니다. 정식 릴리스는 v* 태그 릴리스를 사용하세요."
+          } > dist/NOTES.md
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocketrisu-app-release-apk
+          path: dist/*
+          retention-days: 30
+
+      - name: Move nightly tag
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f nightly
+          git push -f origin nightly
+
+      - name: Publish nightly pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: "nightly (${{ steps.version.outputs.name }})"
+          body_path: dist/NOTES.md
+          prerelease: true
+          make_latest: false
+          fail_on_unmatched_files: true
+          files: |
+            dist/${{ env.APK_BASENAME }}-nightly.apk
+            dist/SHA256SUMS.txt
+            dist/mapping-nightly.txt

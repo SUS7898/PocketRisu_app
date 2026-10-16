@@ -8,23 +8,28 @@ plugins {
 }
 
 // ---------------------------------------------------------------------------
-// Versioning
-// Release builds receive their version from the git tag:
-//   ./gradlew assembleRelease -PappVersionName=1.2.3 -PappVersionCode=1002003
-// (see .github/workflows/release.yml). Local builds fall back to 0.1.0.
+// Versioning (docs/DESIGN.md §5)
+// CI passes the version name; the code is derived from it so every build that can be
+// installed over another has a strictly increasing code:
+//   release   1.2.3              -> 1*1_000_000 + 2*10_000 + 3*100 + 0   = 1_020_300
+//   dev build 1.2.3-dev.7+abc123 -> ... + 7 (commits since the tag, capped at 99) = 1_020_307
+// A dev build after 1.2.3 therefore installs over 1.2.3, and 1.2.4 installs over any
+// 1.2.3-dev.N. Local builds fall back to 0.1.0-local (code of 0.1.0).
 // ---------------------------------------------------------------------------
 fun versionCodeFrom(name: String): Int {
-    val core = name.substringBefore('-').split('.')
+    val core = name.substringBefore('-').substringBefore('+').split('.')
     val major = core.getOrNull(0)?.toIntOrNull() ?: 0
     val minor = core.getOrNull(1)?.toIntOrNull() ?: 0
     val patch = core.getOrNull(2)?.toIntOrNull() ?: 0
-    return major * 1_000_000 + minor * 1_000 + patch
+    val dev = Regex("""-dev\.(\d+)""").find(name)?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(0, 99) ?: 0
+    return major * 1_000_000 + minor * 10_000 + patch * 100 + dev
 }
 
 val appVersionName: String = (findProperty("appVersionName") as String?)
-    ?.trim()?.removePrefix("v")?.takeIf { it.isNotEmpty() } ?: "0.1.0"
+    ?.trim()?.removePrefix("v")?.takeIf { it.isNotEmpty() } ?: "0.1.0-local"
 val appVersionCode: Int = (findProperty("appVersionCode") as String?)?.trim()?.toIntOrNull()
     ?: versionCodeFrom(appVersionName)
+logger.lifecycle("[PocketRisuApp] version $appVersionName (code $appVersionCode)")
 
 // ---------------------------------------------------------------------------
 // Signing

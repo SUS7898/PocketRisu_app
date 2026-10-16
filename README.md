@@ -22,11 +22,20 @@ Windows PowerShell: `.\gradlew.bat :app:assembleDebug`. JDK 17, Android SDK 35.
 
 릴리스(서명) 빌드는 저장소 루트의 `keystore.properties`(git-ignored) 또는 환경변수 `KEYSTORE_FILE / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD`를 읽는다. 없으면 디버그 키로 서명되며 배포하면 안 된다.
 
+## 빌드 채널
+
+| 채널 | 언제 | 어디서 받나 | 버전 |
+|---|---|---|---|
+| **nightly** | `main`에 push할 때마다 (`ci.yml`) | [releases/tag/nightly](https://github.com/SUS7898/PocketRisu_app/releases/tag/nightly) → `pocketrisu-app-nightly.apk` | `0.1.0-dev.5+abc1234` (마지막 태그 + 커밋 수 + sha) |
+| **release** | `vX.Y.Z` 태그 push (`release.yml`) | Releases 최신 | `X.Y.Z` — 앱 내 업데이트가 따르는 채널 |
+
+둘 다 같은 키로 서명되므로 서로 덮어쓰기 설치가 된다. `versionCode`는 `major*1_000_000 + minor*10_000 + patch*100 + dev(0~99)`라 nightly → 다음 정식 → 그 다음 nightly 순으로 항상 증가한다.
+
 ## 릴리스
 
 1. GitHub Secrets 4개 등록 (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`). 키는 저장소 밖 `pocketrisu-app-keystore/`에 있다.
 2. `git tag vX.Y.Z && git push origin vX.Y.Z` → `release.yml`이 테스트·취약점 스캔·서명 APK·`SHA256SUMS.txt`를 Release로 발행.
-3. 앱 내 업데이트가 `releases/latest`를 읽는다.
+3. 앱 내 업데이트가 `releases/latest`를 읽는다(nightly는 `make_latest: false`라 제외).
 
 서명 인증서 SHA-256 (수동 확인용): `378a0f32f1e77cfb2df86e0c10685e8694b8d0a3bb173271f0946793fc24c6f4`
 

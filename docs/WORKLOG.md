@@ -33,7 +33,16 @@
 | `apksigner verify --print-certs` | v3 true, `CN=PocketRisu App, OU=SUS7898`, cert SHA-256 `378a0f32…c6f4` |
 | `aapt2 dump badging` | `com.sus7898.pocketrisu` 0.1.0 (1000), minSdk 33, targetSdk 35 |
 
+### 실기기 1차 (S26 Ultra, Android 17, WebView 154)
+사용자가 0.1.0 설치 후 내보낸 로그:
+- `13:37:35 App start` → `13:38:01 Setup server reachable version=1.14.0 type=docker passwordSet=true` → `13:38:03 url saved` → `WebView ready` → `mode=server-ui` → `13:38:04.578 page finished path=/` (셸 오버헤드 0.8초). W/E 없음 → 셸은 정상.
+- 머리의 `(version unknown)`는 T-4 버그 → 수정.
+- 한계: 1단계 로그는 `/api/read`(100MB 부트스트랩)·채팅·삽화의 **소요시간을 재지 않는다**. "느린가?"는 마일스톤 2 계측 후 답할 수 있음. 이번 수정으로 `/api/read` 요청 시작 시각만 I 레벨로 추가.
+
+### CI 변경 (사용자 요청: push로 APK 생성)
+- `ci.yml`에 `nightly` 잡 추가: main push → `git describe` 버전 → 서명 릴리스 APK → `nightly` 프리릴리스 갱신(`make_latest:false`).
+- versionCode 공식 변경: `X*1_000_000 + Y*10_000 + Z*100 + dev(0~99)` (`release.yml`도 동일). 기존 설치(0.1.0, code 1000) 위에 새 체계(code 10000+)가 올라감.
+
 ### 미검증 / 다음
-- 실기기(S7+, S26) 설치·실행·로그 내보내기 — 사용자 확인 필요.
-- GitHub Secrets 등록(`pocketrisu-app-keystore/set-secrets.sh`) 및 첫 태그 릴리스 — 사용자 승인 후.
+- S7+ 설치·로그 — 사용자 확인 필요.
 - 마일스톤 2: InterceptLayer tee + 계측 → `MEASUREMENTS.md` 0차 실측.

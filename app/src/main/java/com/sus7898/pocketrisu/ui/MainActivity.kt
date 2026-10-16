@@ -185,10 +185,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-            // Milestone 1: observe only. Milestone 2 adds the cache layer here (DESIGN.md §3.2).
+            // Milestone 1: observe only. Milestone 2 adds the tee/measure layer here (DESIGN.md §3.2).
+            // Bootstrap (/api/read) is logged at I so the exported log at least shows when the
+            // data load started relative to "page finished"; the rest stays at D.
             val path = request.url.encodedPath ?: return null
             if (request.method == "GET" && OBSERVED_PREFIXES.any { path.startsWith(it) }) {
-                AppLog.d("Intercept", "observe GET ${path.take(40)}")
+                if (path.startsWith("/api/read")) AppLog.i("Intercept", "observe GET /api/read (bootstrap)")
+                else AppLog.d("Intercept", "observe GET ${path.take(40)}")
             }
             return null
         }

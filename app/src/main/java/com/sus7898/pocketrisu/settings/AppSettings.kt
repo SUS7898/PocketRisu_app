@@ -18,6 +18,11 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(KEY_INCLUDE_HOST, false)
         set(value) = prefs.edit { putBoolean(KEY_INCLUDE_HOST, value) }
 
+    /** Last successful probe, e.g. "version 1.14.0 (deploymentType=docker)"; shown when a fresh probe is still pending. */
+    var lastServerInfo: String?
+        get() = prefs.getString(KEY_LAST_SERVER_INFO, null)
+        set(value) = prefs.edit { putString(KEY_LAST_SERVER_INFO, value) }
+
     fun serverHttpUrl(): HttpUrl? = serverUrl?.toHttpUrlOrNull()
 
     fun serverHost(): String? = serverHttpUrl()?.host
@@ -25,6 +30,7 @@ class AppSettings(context: Context) {
     companion object {
         private const val KEY_SERVER_URL = "serverUrl"
         private const val KEY_INCLUDE_HOST = "includeHostInExport"
+        private const val KEY_LAST_SERVER_INFO = "lastServerInfo"
 
         /** Validates user input; returns the normalised base URL or null. */
         fun normalizeServerUrl(raw: String, allowHttp: Boolean): String? {

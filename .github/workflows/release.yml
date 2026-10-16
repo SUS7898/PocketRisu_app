@@ -43,7 +43,8 @@ jobs:
           NAME="${TAG#v}"
           CORE="${NAME%%-*}"
           IFS=. read -r MA MI PA <<< "$CORE"
-          CODE=$((MA*1000000 + MI*1000 + PA))
+          # Must match versionCodeFrom() in app/build.gradle.kts (dev component = 0 for releases).
+          CODE=$((MA*1000000 + MI*10000 + PA*100))
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
           echo "Version $NAME (code $CODE)"

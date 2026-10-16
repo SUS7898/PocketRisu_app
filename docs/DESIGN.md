@@ -183,7 +183,8 @@ PocketRisu 서버의 웹 UI를 그대로 쓰는 WebView 앱에, **네이티브 �
 | 생체인증 | `androidx.biometric` | 표준 |
 | 이미지 변환 | Android `Bitmap` + WebP 인코더(API 30+ 무손실/손실 지원) | 외부 라이브러리 불필요 |
 | 서명 | 자체 keystore(RSA 4096, 유효 30년) → GitHub Secrets(base64) | Play 미사용. **키 분실 = 업데이트 불가**이므로 오프라인 백업 2곳 안내 |
-| 버전 | `versionName = 1.x.y`, `versionCode` 단조 증가, 2단계부터 `+upstream.v1.14.0` 접미 | 업데이트 판정·호환 표시 |
+| 버전 | `versionName = X.Y.Z`(태그) / `X.Y.Z-dev.N+sha`(main push nightly). `versionCode = X*1_000_000 + Y*10_000 + Z*100 + N(0~99)` → nightly·정식이 교대로 나와도 항상 증가. 2단계부터 번들 upstream 버전은 `BuildConfig`로 별도 표시 | 업데이트 판정·호환 표시 |
+| 빌드 채널 | main push → `nightly` 프리릴리스(서명, `make_latest:false`) / `v*` 태그 → 정식 릴리스 | 테스트 빌드를 바로 받되 앱 내 업데이트는 정식만 따름 |
 
 ---
 

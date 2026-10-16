@@ -64,9 +64,16 @@ class DiagnosticsActivity : AppCompatActivity() {
 
     private fun probeServer() {
         val base = settings.serverUrl ?: return
+        // Until the probe answers, show (and export) the last known answer rather than "unknown"
+        // (docs/TROUBLESHOOTING.md T-4).
+        serverVersionLine = settings.lastServerInfo?.let { "$it [cached]" }
         lifecycleScope.launch {
             serverVersionLine = ServerProbe.probe(base).fold(
-                onSuccess = { "version ${it.version} (deploymentType=${it.deploymentType})" },
+                onSuccess = {
+                    val line = "version ${it.version} (deploymentType=${it.deploymentType})"
+                    settings.lastServerInfo = line
+                    line
+                },
                 onFailure = { "unreachable: ${it.message ?: it.javaClass.simpleName}" },
             )
             renderHeader()
