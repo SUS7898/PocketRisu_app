@@ -27,6 +27,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewCompat
 import com.sus7898.pocketrisu.R
 import com.sus7898.pocketrisu.databinding.ActivityMainBinding
+import com.sus7898.pocketrisu.intercept.RequestObserver
 import com.sus7898.pocketrisu.log.AppLog
 import com.sus7898.pocketrisu.net.Http
 import com.sus7898.pocketrisu.settings.AppSettings
@@ -205,13 +206,9 @@ class MainActivity : AppCompatActivity() {
 
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             // Milestone 1: observe only. Milestone 2 adds the tee/measure layer here (DESIGN.md §3.2).
-            // Bootstrap (/api/read) is logged at I so the exported log at least shows when the
-            // data load started relative to "page finished"; the rest stays at D.
-            val path = request.url.encodedPath ?: return null
-            if (request.method == "GET" && OBSERVED_PREFIXES.any { path.startsWith(it) }) {
-                if (path.startsWith("/api/read")) AppLog.i("Intercept", "observe GET /api/read (bootstrap)")
-                else AppLog.d("Intercept", "observe GET ${path.take(40)}")
-            }
+            // /api/read is the generic KV read: the key travels in the `file-path` header (hex), so
+            // the key prefix is what tells bootstrap (database/database.bin) apart from asset reads.
+            if (request.method == "GET") RequestObserver.observe(request)
             return null
         }
 
@@ -265,6 +262,5 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "Shell"
-        private val OBSERVED_PREFIXES = listOf("/api/read", "/api/chat-content/", "/api/asset/", "/api/model-jobs")
     }
 }

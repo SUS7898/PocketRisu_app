@@ -65,6 +65,7 @@ exported: 2026-10-16T13:45:00+09:00
 |---|---|
 | 앱이 서버에 붙었나 | `I/Setup server reachable status=... version=...` |
 | 어떤 모드로 떴나 | `I/Shell mode=server-ui` (2단계: `mode=bundled v1.14.0`) |
+| 무엇을 언제 읽었나 (M1) | `I/Intercept read key=database/database.bin`(부트스트랩) / `read key=assets/ …`(캐릭터·모듈·플러그인이 바이트로 읽음) / `chat-content chaId=… delta=…` / `asset requests n=50 inlay=…`(표시용 이미지 50건마다 집계) |
 | 홈 100MB를 다시 받았나 | `I/Cache db.bin etag=... hit=304` vs `miss=200 bytes=...` (마일스톤 2부터) |
 | 삽화가 캐시에서 나왔나 | `I/Cache asset hit ...` / `miss ...` 와 세션 요약 `hit=118 miss=12` |
 | 채팅이 왜 안 열렸나 | `W/Intercept chat-content first-byte timeout 8000ms → cache fallback` / `E/...` |

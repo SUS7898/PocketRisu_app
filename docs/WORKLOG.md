@@ -63,7 +63,16 @@
 - Release run 38853104614 success (3m27s): Trivy 통과, 서명 검증(v3) 통과 → `v0.1.0` 릴리스(Latest) 발행.
 - 이 WORKLOG 커밋을 push하면 nightly가 `0.1.0-dev.1+<sha>`(code 10001)로 갱신되어, 설치된 v0.1.0(code 10000) 위에 앱 내 업데이트(nightly 채널)를 시험할 수 있다.
 
+### 실기기 2차 (S26 Ultra, v0.1.0 code 10000) — "빈 채팅방인데 캐릭터 첫 진입이 느림"
+로그 타임라인:
+- `14:21:49.2 page finished` → `14:21:54.6` 첫 `/api/read` (로그인 후 부트스트랩 시작으로 추정) → **60초 공백** → `14:22:54` 10건 버스트(5건은 같은 ms = 병렬 소형 읽기).
+- `14:25:04` 9건을 50ms 간격으로 + 플러그인 샌드박스 오류 2건(`API method toast not found (about:srcdoc)` = API v3 플러그인이 PocketRisu에 없는 `toast`를 호출, 무해).
+- `14:26:26 → 14:27:19` **12건이 3~4초 간격으로 직렬** = 약 53초. 캐릭터 진입 구간으로 추정.
+해석의 한계: M1은 `/api/read`를 모두 "bootstrap"으로 찍었지만 실제로는 **범용 KV 읽기**(`file-path` 헤더에 키). 소스상 `/api/read`로 바이트를 읽는 곳은 부트스트랩(`database/database.bin`), `readImage()`(process/index, characterCards, persona), **플러그인 API v3 `getItem('assets/…')`** 이다. 표시용 이미지는 `/api/asset`(HTTP 캐시)로 가므로, 3~4초 간격 직렬 12건은 플러그인 또는 처리 로직이 큰 에셋을 **순차로 통째 읽는** 패턴일 가능성이 높다. 키가 없어 확정 불가 → `RequestObserver`로 키 접두사·chaId·델타 여부를 기록하도록 변경(이 커밋). 다음 로그에서 `read key=assets/ …`가 12건 직렬로 보이면 확정.
+- 셸 자체는 정상(`mode=server-ui`, W/E 없음). 업데이트 확인도 동작(`check channel=STABLE … newer=false`).
+
 ### 미검증 / 다음
+- 캐릭터 첫 진입 53초의 정체 — 새 nightly로 같은 동작 반복 후 로그 (키 이름 포함).
 - 실기기에서 설정 → 업데이트 확인 → 설치까지의 흐름(특히 `USER_ACTION_NOT_REQUIRED`가 One UI에서 적용되는지) — nightly 2개가 쌓이면 테스트 가능.
 - S7+ 설치·로그 — 사용자 확인 필요.
 - 마일스톤 2: InterceptLayer tee + 계측 → `MEASUREMENTS.md` 0차 실측.
