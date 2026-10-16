@@ -120,7 +120,21 @@
 - 번들 모드·keep-alive·알림 권한 정상. 부트스트랩→홈 14초. 채팅 열기 재시도 없음, `/api/db/flush` 0건 → **패치 020 효과 확인**.
 - 20:06:57 MainActivity 0.3초 간격 2회 재생성(프로세스 유지) → 페이지 재로드(T-15). `RetainedSession`으로 WebView를 Activity 재생성에서 살리고 `configChanges` 확대.
 
+### 실기기 10차 (Tab S7+, dev.9, 실제 채팅 1턴 전체) — 시간 분해
+| 구간 | 로그 | 소요 |
+|---|---|---|
+| 메인 모델(Gemini 3.1 Pro, 서버 job) | `POST model-jobs` 20:15:22 → `DELETE` 20:16:07 / 20:16:14 → 20:17:19 | **45초 / 65초** |
+| 보조 모델(3.8 Flash) | `[ModelJob] job creation rejected (400), falling back to direct request path` → `POST /proxy2` 20:18:20 → 첫 NAI 호출 20:19:12 | **≈52초** (서버 job 거부 → 브라우저 직접 경로) |
+| 삽화 12장(NAI) | `/proxy2` → `inlay_meta` 읽기 → `inlay`·`inlay_info`·`inlay_meta` 쓰기, 장당 ≈5.5초 **직렬** | **68초** (20:19:12 → 20:20:20) |
+| 채팅 열기 3회 | 각 1회 요청, 재시도 없음, `/api/db/flush` 0건 | 즉시 |
+| 부트스트랩→홈 | 19:53:33 → 19:53:47 | 14초 |
+- 1턴 합계 ≈ 165~185초 = 사용자가 말한 "90~180초"의 정체. 앱이 건드릴 수 있는 건 삽화 직렬 68초(병렬화 패치 후보)와 부트스트랩 다운로드 부분뿐; 모델 시간(45~65 + 52초)은 Gemini 응답 시간.
+- 보조 모델이 서버 job에서 400으로 거부돼 **브라우저 직접 경로**로 간다 → 이 구간은 앱이 백그라운드로 가면 끊긴다(keep-alive가 중요한 이유). 왜 400인지는 PocketRisu 쪽 확인 필요(Vertex 서비스계정 모델?).
+- 블롭 다운로드 실패 1건(T-16) → `DownloadBridge` + 패치 030.
+- 기타: Lua 스크립트 오류(`secondLastChat` nil), Lightboard 플러그인 출력 처리 실패, 플러그인 저장소 읽기 ≈8/분(WygLore, 폭주는 아님), `drafts/` 초고 자동저장 분당 ~20회.
+
 ### 미검증 / 다음
+- 삽화 병렬화 패치(040) 설계: NAI 동시 2~3장, 429 시 직렬 복귀.
 - T-15: 태블릿에서 키보드 커버 탈착·회전·분할 화면 뒤 `WebView re-attached` 로그와 함께 페이지가 유지되는지.
 - dev.9 로그: `POST /api/db/flush` 부재 + 첫 채팅 열기 재시도 없음 확인.
 - T-12: keep-alive 켠 상태에서 앱 전환 후 복귀 시 `renderer gone` 재발 여부.

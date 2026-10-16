@@ -357,8 +357,13 @@ class MainActivity : AppCompatActivity() {
 
         wv.webViewClient = ShellWebViewClient(this, base)
         wv.webChromeClient = ShellWebChromeClient(this)
+        DownloadBridge.install(wv, base)
         wv.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-            (wv.webViewClient as? ShellWebViewClient)?.host?.startDownload(url, userAgent, contentDisposition, mimeType)
+            if (url.startsWith("blob:")) {
+                DownloadBridge.requestBlob(wv, url, mimeType)
+            } else {
+                (wv.webViewClient as? ShellWebViewClient)?.host?.startDownload(url, userAgent, contentDisposition, mimeType)
+            }
         }
 
         val pkg = WebViewCompat.getCurrentWebViewPackage(this)
@@ -373,9 +378,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun startDownload(url: String, userAgent: String, contentDisposition: String, mimeType: String) {
         if (!url.startsWith("http")) {
-            // blob:/data: downloads (exports produced in-page) need a JS bridge; milestone 7.
-            AppLog.w(TAG, "download scheme not supported yet: ${url.substringBefore(':')}")
-            Toast.makeText(this, "이 형식의 다운로드는 아직 지원하지 않습니다", Toast.LENGTH_SHORT).show()
+            // data: URLs are rare in PocketRisu; blob: is handled by DownloadBridge.
+            AppLog.w(TAG, "download scheme not supported: ${url.substringBefore(':')}")
+            Toast.makeText(this, "이 형식의 다운로드는 지원하지 않습니다", Toast.LENGTH_SHORT).show()
             return
         }
         val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)

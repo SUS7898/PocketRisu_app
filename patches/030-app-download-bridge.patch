@@ -1,0 +1,23 @@
+diff --git a/src/ts/globalApi.svelte.ts b/src/ts/globalApi.svelte.ts
+index 9a3626c..e7865d6 100644
+--- a/src/ts/globalApi.svelte.ts
++++ b/src/ts/globalApi.svelte.ts
+@@ -217,6 +217,18 @@ export async function downloadFile(name: string, dat: Uint8Array | ArrayBuffer |
+         dat = Buffer.from(dat, 'utf-8')
+     }
+     const data = new Uint8Array(dat)
++    // [PocketRisu_app patch 030] Inside the Android app a blob: download cannot be fetched by the
++    // system downloader; hand the bytes and the real file name to the shell instead
++    // (docs/TROUBLESHOOTING.md T-16). Falls through to the normal anchor download when absent.
++    const appPort = (globalThis as any).__POCKETRISU_APP_BUNDLE__ ? (globalThis as any).PocketRisuAppDownload : undefined
++    if (appPort && typeof appPort.postMessage === 'function') {
++        try {
++            appPort.postMessage(JSON.stringify({ name, mime: 'application/octet-stream', data: Buffer.from(data).toString('base64') }))
++            return
++        } catch (e) {
++            console.warn('[PocketRisuApp] download bridge failed, falling back to anchor download', e)
++        }
++    }
+     const downloadURL = (data: string, fileName: string) => {
+         const a = document.createElement('a')
+         a.href = data

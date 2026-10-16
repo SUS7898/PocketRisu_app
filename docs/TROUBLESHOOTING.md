@@ -158,6 +158,12 @@
 - 함께 확인된 것: S7+에서 부트스트랩→홈 14초(S26과 동급), 채팅 열기 1회 요청으로 즉시, **`/api/db/flush` 0건**(패치 020 작동), 알림 권한 허용·keep-alive 기동 정상.
 - 재발 방지: `I/App start` 없이 `WebView ready`가 다시 찍히면 이 항목. 재생성 원인을 특정하려면 `onConfigurationChanged`에서 바뀐 필드를 로그로 남기는 것이 다음 단계(현재는 생략).
 
+## T-16. 웹 UI에서 내보내기/저장을 누르면 "이 형식의 다운로드는 아직 지원하지 않습니다"
+- 발생: 2026-10-16 20:18:31, Tab S7+, dev.9. 로그 `W/Shell download scheme not supported yet: blob`.
+- 원인: PocketRisu는 파일을 `Blob` → `URL.createObjectURL` → `<a download>` 클릭으로 내려준다(`globalApi.svelte.ts downloadFile`). WebView의 DownloadListener에는 `blob:` URL만 오고, Android DownloadManager는 blob을 읽을 수 없으며 파일명(`a.download`)도 전달되지 않는다.
+- 해결: `DownloadBridge` — `WebMessageListener` 포트 `PocketRisuAppDownload`를 서버 origin에만 노출. ① 번들 모드: 패치 030이 `downloadFile`에서 `{name, mime, data(base64)}`를 포트로 직접 보내 **원래 파일명**으로 저장. ② 서버 UI 모드: DownloadListener가 blob을 페이지 안에서 `fetch`해 같은 포트로 보냄(파일명은 시각 기반, 확장자는 MIME 추정). 저장 위치 `Downloads/PocketRisu/` (MediaStore, 권한 불필요). 로그 `I/Download saved …`.
+- 한계: base64 문자열 하나로 넘기므로 수백 MB 내보내기는 느리고 메모리를 많이 쓴다. 채팅 내보내기 기능(M6)은 네이티브에서 직접 만들 예정이라 이 경로를 타지 않는다.
+
 ## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패
 - 발생: 2026-10-16 14:58, S26 Ultra(One UI, Android 17), dev.2 → dev.4 첫 시도. 두 번째 시도는 성공.
 - 원인: `SessionParams.setRequireUserAction(USER_ACTION_NOT_REQUIRED)`를 요청하면 One UI가 "알 수 없는 출처" 패키지의 자체 업데이트를 세션 단계에서 거부함(사용자 확인 창이 뜬 뒤 0.8초 만에 ABORTED).
