@@ -5,7 +5,9 @@ import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.Intent
 import android.content.MutableContextWrapper
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -69,6 +71,7 @@ class MainActivity : AppCompatActivity() {
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
 
     private val session get() = RetainedSession
+    private var lastConfig: Configuration? = null
     private val handler = Handler(Looper.getMainLooper())
     private val healthCheck = Runnable { if (!session.apiSeen) fallbackToServerUi("no /api traffic within ${HEALTH_TIMEOUT_MS / 1000}s") }
 
@@ -94,6 +97,8 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         applySystemInsets()
+        lastConfig = Configuration(resources.configuration)
+        if (savedInstanceState != null) AppLog.i(TAG, "activity recreated by the system (saved state present)")
 
         binding.menuHandle.setOnClickListener {
             AppMenuSheet.show(this) { session.webView?.reload() }
@@ -256,6 +261,24 @@ class MainActivity : AppCompatActivity() {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         KeepAliveService.start(this)
+    }
+
+    /** Which configuration fields changed (handled in place thanks to configChanges) — names the culprit of T-15. */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        val diff = lastConfig?.diff(newConfig) ?: 0
+        lastConfig = Configuration(newConfig)
+        val names = listOf(
+            ActivityInfo.CONFIG_ORIENTATION to "orientation", ActivityInfo.CONFIG_SCREEN_SIZE to "screenSize",
+            ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE to "smallestScreenSize", ActivityInfo.CONFIG_SCREEN_LAYOUT to "screenLayout",
+            ActivityInfo.CONFIG_KEYBOARD to "keyboard", ActivityInfo.CONFIG_KEYBOARD_HIDDEN to "keyboardHidden",
+            ActivityInfo.CONFIG_NAVIGATION to "navigation", ActivityInfo.CONFIG_UI_MODE to "uiMode",
+            ActivityInfo.CONFIG_DENSITY to "density", ActivityInfo.CONFIG_FONT_SCALE to "fontScale",
+            ActivityInfo.CONFIG_LOCALE to "locale", ActivityInfo.CONFIG_LAYOUT_DIRECTION to "layoutDirection",
+            ActivityInfo.CONFIG_COLOR_MODE to "colorMode", ActivityInfo.CONFIG_TOUCHSCREEN to "touchscreen",
+            ActivityInfo.CONFIG_MCC to "mcc", ActivityInfo.CONFIG_MNC to "mnc",
+        ).filter { diff and it.first != 0 }.joinToString(",") { it.second }
+        AppLog.i(TAG, "configuration changed in place: ${names.ifEmpty { "0x" + Integer.toHexString(diff) }}")
+        super.onConfigurationChanged(newConfig)
     }
 
     override fun onResume() {

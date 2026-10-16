@@ -133,8 +133,17 @@
 - 블롭 다운로드 실패 1건(T-16) → `DownloadBridge` + 패치 030.
 - 기타: Lua 스크립트 오류(`secondLastChat` nil), Lightboard 플러그인 출력 처리 실패, 플러그인 저장소 읽기 ≈8/분(WygLore, 폭주는 아님), `drafts/` 초고 자동저장 분당 ~20회.
 
+### 삽화 병렬화 조사 — 패치 불필요
+- 12장은 PocketRisu 코어가 아니라 **Lightboard 모듈(lb-xnai)** 의 Lua가 돌린다: `xnai.gen.lua` → `lb--be/lorebooks/image.lua generateImageFromPrompts` → PocketRisu Lua API `generateImage()`(`scriptings.ts:409`, 뮤텍스 없음) → `generateAIImage` → `/proxy2`(NAI) → `writeInlayImage`.
+- Lightboard `lb--be/triggers/pipeline.lua runGenerationBatch`가 **이미 동시 실행을 지원**: 전역 변수 `toggle_lightboard.concurrent`(1~5, 기본 1)만큼 워커를 띄움. 사용자 설정이 1이라 직렬이었음. → 앱 패치(040) 대신 **모듈 설정에서 2~3으로** 올리면 됨. NAI 429가 나면 1~2로.
+- 저장 구조 재확인(사용자 질문): 채팅 생성/편집은 `POST /api/chat-content …`(서버가 `queueStorageOperation` 안에서 즉시 저장), 그 외 변경은 `POST /api/patch`(메모리 반영 → 5초 뒤 디스크 + 백업 회전), 임포트·이미지는 `POST /api/write`(즉시). 패치 020이 뺀 것은 "화면 전환 때 5초 타이머를 지금 당장 돌려라"뿐.
+
+### 실기기 11차 (Tab S7+, dev.9) — 삽화 오류 뒤 새로고침
+- 20:58:28 `[Lightboard] sideEffect 출력 처리 실패 … 응답이 비어있습니다. 검열?`(모듈 오류, 앱 무관) → 20:59:18 `KeepAlive started` → `state restored` → 재부트스트랩. `App start` 없음 = T-15 재발(dev.9에는 수정 미포함). 원인 필드를 잡기 위해 `onConfigurationChanged` diff 로깅 + "activity recreated" 로그 추가.
+
 ### 미검증 / 다음
-- 삽화 병렬화 패치(040) 설계: NAI 동시 2~3장, 429 시 직렬 복귀.
+- Lightboard `concurrent` 2~3 설정 후 12장 소요 비교(68초 기준).
+- 삽화 병렬화 패치(040) — Lightboard 설정으로 대체, 보류: NAI 동시 2~3장, 429 시 직렬 복귀.
 - T-15: 태블릿에서 키보드 커버 탈착·회전·분할 화면 뒤 `WebView re-attached` 로그와 함께 페이지가 유지되는지.
 - dev.9 로그: `POST /api/db/flush` 부재 + 첫 채팅 열기 재시도 없음 확인.
 - T-12: keep-alive 켠 상태에서 앱 전환 후 복귀 시 `renderer gone` 재발 여부.

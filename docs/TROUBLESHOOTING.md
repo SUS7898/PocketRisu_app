@@ -156,7 +156,8 @@
   1. `configChanges`에 `keyboard|navigation|fontScale|locale|layoutDirection|colorMode|touchscreen|mcc|mnc|grammaticalGender` 추가 → 대부분의 변경은 재생성 자체가 없음.
   2. 그래도 재생성되는 경우를 위해 **WebView를 Activity 밖(`RetainedSession`)에 보관**: `MutableContextWrapper`로 만든 WebView를 `onDestroy(isFinishing=false)`에서 떼어 두고, 새 Activity가 `baseContext`·클라이언트 host만 바꿔 다시 붙인다. 페이지는 프로세스당 한 번만 로드된다. 로그에 `WebView re-attached after activity recreation`이 남는다.
 - 함께 확인된 것: S7+에서 부트스트랩→홈 14초(S26과 동급), 채팅 열기 1회 요청으로 즉시, **`/api/db/flush` 0건**(패치 020 작동), 알림 권한 허용·keep-alive 기동 정상.
-- 재발 방지: `I/App start` 없이 `WebView ready`가 다시 찍히면 이 항목. 재생성 원인을 특정하려면 `onConfigurationChanged`에서 바뀐 필드를 로그로 남기는 것이 다음 단계(현재는 생략).
+- 재발 방지: `I/App start` 없이 `WebView ready`가 다시 찍히면 이 항목. dev.12부터 `I/Shell activity recreated by the system (saved state present)`와 `configuration changed in place: <필드>` 로그로 원인 필드를 특정한다.
+- 재발 기록: 20:59:18 (dev.9, 삽화 오류 50초 뒤) 동일 패턴 — 모듈 오류와 무관, 사용자가 dev.11 이상으로 올리면 재로드 없이 유지되어야 함.
 
 ## T-16. 웹 UI에서 내보내기/저장을 누르면 "이 형식의 다운로드는 아직 지원하지 않습니다"
 - 발생: 2026-10-16 20:18:31, Tab S7+, dev.9. 로그 `W/Shell download scheme not supported yet: blob`.
