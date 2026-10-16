@@ -58,6 +58,11 @@
 | `.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleRelease` | BUILD SUCCESSFUL (테스트 13건, Lint 오류 0) |
 | `--% -PappVersionName="0.1.0-dev.3+abc1234"` | `versionCode=10003`, `versionName=0.1.0-dev.3+abc1234` (aapt2 badging) |
 
+### CI 2차 (실행 비트 수정 후)
+- CI run 38853092012 success (6m25s): 테스트·Lint·디버그 APK + nightly 잡 → `nightly (0.1.0)` 프리릴리스 발행.
+- Release run 38853104614 success (3m27s): Trivy 통과, 서명 검증(v3) 통과 → `v0.1.0` 릴리스(Latest) 발행.
+- 이 WORKLOG 커밋을 push하면 nightly가 `0.1.0-dev.1+<sha>`(code 10001)로 갱신되어, 설치된 v0.1.0(code 10000) 위에 앱 내 업데이트(nightly 채널)를 시험할 수 있다.
+
 ### 미검증 / 다음
 - 실기기에서 설정 → 업데이트 확인 → 설치까지의 흐름(특히 `USER_ACTION_NOT_REQUIRED`가 One UI에서 적용되는지) — nightly 2개가 쌓이면 테스트 가능.
 - S7+ 설치·로그 — 사용자 확인 필요.
