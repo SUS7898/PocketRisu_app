@@ -78,6 +78,7 @@ PocketRisu 서버의 웹 UI를 그대로 쓰는 WebView 앱에, **네이티브 �
 - 파일 선택(`onShowFileChooser`)·다운로드(`DownloadListener` → `DownloadManager`) 연결: 캐릭터 카드/백업 가져오기·내보내기가 웹 UI에서 그대로 동작.
 - 뒤로가기: SPA 히스토리 우선, 루트에서 두 번 눌러 종료.
 - `android:resizeableActivity="true"`, 멀티윈도우 크기 변경 시 WebView 재레이아웃만(재로드 금지).
+- 시스템 인셋: targetSdk 35의 edge-to-edge에서 루트에 systemBars·displayCutout·ime 패딩을 직접 적용(T-11). PocketRisu CSS가 safe-area를 모르므로 셸이 책임진다; 키보드가 뜨면 WebView가 줄어들어 입력창이 보인다.
 - 앱 메뉴(네이티브 바텀시트, 화면 가장자리 스와이프 또는 상단바 버튼): 내보내기 · 캐시/진단 · 잠금 · 업데이트 · 설정.
 
 ### 3.2 InterceptLayer (`app/intercept`)

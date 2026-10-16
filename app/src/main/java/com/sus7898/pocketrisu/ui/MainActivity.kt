@@ -25,6 +25,9 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewCompat
 import com.sus7898.pocketrisu.R
@@ -82,6 +85,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applySystemInsets()
 
         binding.menuHandle.setOnClickListener {
             AppMenuSheet.show(this) { webView?.reload() }
@@ -196,6 +200,27 @@ class MainActivity : AppCompatActivity() {
         settings.recordBundleHealthy(version)
         AppLog.i("Bundle", "healthy: first /api request observed (served ${bundleServer?.served} bundle files)")
         if (!bundleVerified) settings.serverUrl?.let { verifyServerVersionLater(it) }
+    }
+
+    /**
+     * targetSdk 35 draws edge-to-edge, so without this the web UI's header sits under the status
+     * bar and its bottom row under the gesture bar (docs/TROUBLESHOOTING.md T-11). PocketRisu's CSS
+     * does not use safe-area insets, so the shell keeps the page out of the system bars, the camera
+     * cutout and the keyboard (IME inset = the chat input stays visible while typing).
+     */
+    private fun applySystemInsets() {
+        val root = binding.root
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            WindowInsetsCompat.CONSUMED
+        }
+        // The padded strips show the dark window background; keep system icons light on it.
+        WindowInsetsControllerCompat(window, root).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
     }
 
     override fun onResume() {

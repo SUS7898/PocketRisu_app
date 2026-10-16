@@ -101,6 +101,13 @@
 - 해결: 실패 메시지에 VERIFICATION/ABORTED가 있으면 "한 번 더 누르면 보통 통과" 안내 토스트. 재시도 시 같은 크기의 APK가 있으면 재다운로드 없이 검증(SHA-256·서명)만 다시 하고 설치.
 - 재발 방지: Samsung 설정 → 보안 → Auto Blocker를 끄면 첫 시도에 통과할 가능성이 큼(사용자 선택).
 
+## T-11. 휴대폰에서 웹 UI 상단이 상태 표시줄 밑에 깔려 터치가 불편함 (하단은 제스처 바 밑)
+- 발생: 2026-10-16 15:23, S26 Ultra(세로), PocketRisu 플러그인 화면 스크린샷. 페이지 제목·상단 버튼이 상태 표시줄 바로 밑에 붙고, 목록 마지막 줄이 제스처 바에 가려짐.
+- 원인: `targetSdk 35`부터 앱이 강제로 edge-to-edge(시스템 바 아래까지 그리기)로 뜨는데, 셸이 WebView에 시스템 바 인셋을 적용하지 않았고 PocketRisu CSS도 `safe-area-inset`을 쓰지 않음. 같은 이유로 **키보드가 올라오면 채팅 입력창이 가려질 수** 있었음(IME 인셋 미처리).
+- 해결: `MainActivity.applySystemInsets()` — 루트에 systemBars + displayCutout(카메라 홀) + ime 인셋만큼 패딩. 패딩 띠는 어두운 창 배경색, 시스템 아이콘은 밝게. 설정·진단·서버 설정 화면은 `fitsSystemWindows`. 앱 메뉴 손잡이는 패딩 안쪽 72dp로.
+- 같이 점검한 것(같은 뿌리): 하단 제스처 바 겹침(해결), 키보드 겹침(해결), 가로 모드 카메라 홀(해결), 분할 화면(인셋이 창 기준이라 그대로 적용), 태블릿 S7+(3버튼 내비게이션이어도 같은 코드로 처리).
+- 남은 것: 앱 메뉴 손잡이(우측 가장자리 14dp)가 PocketRisu 목록의 우측 `⋮` 버튼과 가까워 오터치 가능성 — 사용해 보고 불편하면 위치를 바꾸거나 길게 눌러 숨기기 추가.
+
 ## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패
 - 발생: 2026-10-16 14:58, S26 Ultra(One UI, Android 17), dev.2 → dev.4 첫 시도. 두 번째 시도는 성공.
 - 원인: `SessionParams.setRequireUserAction(USER_ACTION_NOT_REQUIRED)`를 요청하면 One UI가 "알 수 없는 출처" 패키지의 자체 업데이트를 세션 단계에서 거부함(사용자 확인 창이 뜬 뒤 0.8초 만에 ABORTED).

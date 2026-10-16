@@ -102,7 +102,11 @@
 - 채팅 3개 모두 재시도 없이 열림. 전체 업로드(`write database.bin`) 없음 → T-7 가설 보류. 대신 ① 직전 4분 서버 연결 불가(ConnectException, 공인 IP 경로) ② WygLore 플러그인 78MB+ 옛 페이로드 경고 발견.
 - 테스트: 19건 통과, Lint 오류 0, assembleRelease 성공.
 
+### 휴대폰 스크린샷 — 시스템 바 겹침 (T-11)
+- 웹 UI가 상태 표시줄·제스처 바 밑에 깔림 → 루트에 systemBars+displayCutout+ime 인셋 패딩. 키보드 겹침도 같이 해결. 보조 화면은 `fitsSystemWindows`.
+
 ### 미검증 / 다음
+- T-11 실기기 확인(세로/가로/키보드/분할 화면).
 - 사용자 조치 권고: WygLore 옛 데이터 정리, Wi-Fi에서 내부 주소/Tailscale로 접속 비교.
 - dev.5 로그에서 `POST write key=database/database.bin len=…` 또는 `[Save] Patch hash mismatch` 확인 → 전체 쓰기 가설 확정.
 - T-7 서버 로그 확인(사용자: `docker logs --since 5m risuai-nodeonly`).
