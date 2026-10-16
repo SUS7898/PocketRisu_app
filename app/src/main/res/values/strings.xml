@@ -1,0 +1,36 @@
+<resources>
+    <string name="app_name">PocketRisu</string>
+    <string name="title_setup">서버 설정</string>
+    <string name="title_diagnostics">진단 · 로그</string>
+
+    <!-- Setup -->
+    <string name="setup_label_url">PocketRisu 서버 주소 (HTTPS)</string>
+    <string name="setup_help">Synology 역방향 프록시의 https 주소를 입력하세요. 평문 http는 세션 쿠키 보호를 위해 허용하지 않습니다.</string>
+    <string name="setup_test">연결 확인</string>
+    <string name="setup_save">저장하고 열기</string>
+    <string name="setup_testing">확인 중…</string>
+    <string name="setup_err_https">https:// 주소만 허용됩니다.</string>
+    <string name="setup_err_invalid">주소 형식이 올바르지 않습니다.</string>
+    <string name="setup_ok">연결됨 · 서버 v%1$s (%2$s)</string>
+    <string name="setup_fail">연결 실패: %1$s</string>
+
+    <!-- Main -->
+    <string name="menu_handle_desc">앱 메뉴 열기</string>
+    <string name="menu_reload">새로고침</string>
+    <string name="menu_diagnostics">진단 · 로그</string>
+    <string name="menu_server">서버 설정</string>
+    <string name="back_again_to_exit">한 번 더 누르면 종료합니다</string>
+    <string name="renderer_restarted">화면 엔진이 재시작되었습니다 (메모리 부족 가능). 로그에 기록했습니다.</string>
+    <string name="page_error">페이지를 불러오지 못했습니다: %1$s</string>
+
+    <!-- Diagnostics -->
+    <string name="diag_refresh">새로고침</string>
+    <string name="diag_export">파일로 저장</string>
+    <string name="diag_share">공유</string>
+    <string name="diag_clear">로그 지우기</string>
+    <string name="diag_include_host">내보낼 때 서버 주소 포함</string>
+    <string name="diag_exported">저장했습니다</string>
+    <string name="diag_export_failed">저장 실패: %1$s</string>
+    <string name="diag_cleared">로그를 지웠습니다</string>
+    <string name="diag_header_loading">서버 정보 확인 중…</string>
+</resources>

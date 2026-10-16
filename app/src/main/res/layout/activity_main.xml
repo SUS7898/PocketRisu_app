@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <FrameLayout
+        android:id="@+id/webViewContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Small translucent handle in the top-right corner; tap opens the app menu.
+         Kept tiny so it does not cover the web UI's own controls. -->
+    <View
+        android:id="@+id/menuHandle"
+        android:layout_width="14dp"
+        android:layout_height="40dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="96dp"
+        android:background="@drawable/menu_handle_bg"
+        android:contentDescription="@string/menu_handle_desc"
+        android:focusable="true"
+        android:clickable="true" />
+</FrameLayout>

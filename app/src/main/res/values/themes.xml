@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.PocketRisuApp" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+
+    <style name="Theme.PocketRisuApp.WithActionBar" parent="Theme.Material3.DayNight" />
+</resources>

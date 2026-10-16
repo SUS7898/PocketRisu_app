@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the share scratch folder is exposed through the FileProvider; logs and caches stay private. -->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>

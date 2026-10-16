@@ -1,0 +1,22 @@
+# Gradle
+.gradle/
+build/
+.kotlin/
+# IDE
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+# Signing material — never commit
+keystore.properties
+*.jks
+*.keystore
+*.p12
+app/release/
+# OS
+.DS_Store
+desktop.ini
+# Lockfile is generated on the fly in CI for vulnerability scanning
+gradle.lockfile
