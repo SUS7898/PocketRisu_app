@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import androidx.webkit.WebViewCompat
 import com.sus7898.pocketrisu.BuildConfig
+import com.sus7898.pocketrisu.bundle.UiModeState
 import com.sus7898.pocketrisu.settings.AppSettings
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -22,9 +23,10 @@ object DiagnosticsReport {
             appendLine("app: ${BuildConfig.VERSION_NAME} (code ${BuildConfig.VERSION_CODE}) ${BuildConfig.BUILD_TYPE}")
             appendLine("device: ${Build.MANUFACTURER} ${Build.MODEL} / Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             appendLine("webview: ${wv?.packageName ?: "?"} ${wv?.versionName ?: "?"}")
-            appendLine("server: $serverShown ${serverVersionLine ?: "(version unknown)"} mode=server-ui")
-            appendLine("verified-server-versions: ${BuildConfig.VERIFIED_SERVER_VERSIONS}")
-            appendLine("settings: includeHost=${settings.includeHostInExport}")
+            appendLine("server: $serverShown ${serverVersionLine ?: "(version unknown)"}")
+            appendLine("mode: ${UiModeState.current.describe()}")
+            appendLine("bundle: ${BuildConfig.BUNDLED_UPSTREAM_VERSION.ifEmpty { "none" }} verified-server-versions: ${BuildConfig.VERIFIED_SERVER_VERSIONS}")
+            appendLine("settings: includeHost=${settings.includeHostInExport} bundleEnabled=${settings.bundleEnabled} nightly=${settings.nightlyChannel} bundleDisabledFor=${settings.bundleDisabledForVersion ?: "-"}")
             appendLine("exported: ${SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(Date())}")
             appendLine("----")
         }

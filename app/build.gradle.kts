@@ -59,6 +59,21 @@ if (!hasReleaseKeystore) {
     logger.warn("[PocketRisuApp] No release keystore configured - release builds will be signed with the DEBUG key.")
 }
 
+// ---------------------------------------------------------------------------
+// Bundled PocketRisu UI (docs/DESIGN.md §4). scripts/build-frontend.sh writes
+// app/src/main/assets/bundle/BUNDLE.json; without it the app still builds and
+// simply never enters bundled mode (BUNDLED_UPSTREAM_VERSION is empty).
+// ---------------------------------------------------------------------------
+val bundleManifest = file("src/main/assets/bundle/BUNDLE.json")
+val bundledUpstreamVersion: String = if (bundleManifest.exists()) {
+    Regex("\"upstreamVersion\"\\s*:\\s*\"([^\"]+)\"").find(bundleManifest.readText())?.groupValues?.get(1) ?: ""
+} else ""
+if (bundledUpstreamVersion.isEmpty()) {
+    logger.warn("[PocketRisuApp] No bundled UI (run scripts/build-frontend.sh) - bundled mode will be unavailable in this build.")
+} else {
+    logger.lifecycle("[PocketRisuApp] bundled UI upstream v$bundledUpstreamVersion")
+}
+
 android {
     namespace = "com.sus7898.pocketrisu"
     compileSdk = 35
@@ -76,6 +91,8 @@ android {
         buildConfigField("String", "UPDATE_REPO_NAME", "\"${findProperty("updateRepoName") ?: "PocketRisu_app"}\"")
         // PocketRisu server versions this app build was verified against (diagnostics banner only).
         buildConfigField("String", "VERIFIED_SERVER_VERSIONS", "\"1.14.0\"")
+        // Upstream version of the web UI bundled in this APK ("" = none; bundled mode off).
+        buildConfigField("String", "BUNDLED_UPSTREAM_VERSION", "\"$bundledUpstreamVersion\"")
     }
 
     signingConfigs {

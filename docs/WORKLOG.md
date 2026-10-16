@@ -71,7 +71,24 @@
 해석의 한계: M1은 `/api/read`를 모두 "bootstrap"으로 찍었지만 실제로는 **범용 KV 읽기**(`file-path` 헤더에 키). 소스상 `/api/read`로 바이트를 읽는 곳은 부트스트랩(`database/database.bin`), `readImage()`(process/index, characterCards, persona), **플러그인 API v3 `getItem('assets/…')`** 이다. 표시용 이미지는 `/api/asset`(HTTP 캐시)로 가므로, 3~4초 간격 직렬 12건은 플러그인 또는 처리 로직이 큰 에셋을 **순차로 통째 읽는** 패턴일 가능성이 높다. 키가 없어 확정 불가 → `RequestObserver`로 키 접두사·chaId·델타 여부를 기록하도록 변경(이 커밋). 다음 로그에서 `read key=assets/ …`가 12건 직렬로 보이면 확정.
 - 셸 자체는 정상(`mode=server-ui`, W/E 없음). 업데이트 확인도 동작(`check channel=STABLE … newer=false`).
 
+### 실기기 3차 — 자체 업데이트 성공
+- `0.1.0(code 10000)` → nightly `0.1.0-dev.1+267ecc1(code 10001)` 앱 내 설치 성공 (`I/Update install success`가 새 버전 첫 실행 시 기록됨 = 설치 리시버가 재시작 후 수신). nightly 채널 확인 `newer=false` 정상.
+- `WebView ready → page finished` 37초 (1차 0.8초). 업데이트 직후 재시작이라 WebView 콜드 스타트/서버 응답 중 어느 쪽인지 미확정. 번들 모드에서는 `index.html`·JS가 로컬이라 이 구간이 사라지므로, 다음 로그로 비교.
+
+### C(번들 모드) 구현 — 사용자 지시로 2단계 착수
+- `scripts/build-frontend.sh` + `upstream.lock`(v1.14.0) + `patches/`(0개). 로컬 실행: 233 files, 70,775KB. 필요 도구 `pnpm@10.34.1` 전역 설치(`npm i -g`).
+- 앱: `bundle/` 패키지(BundleRepository·UiMode·ServerIndexProbe·BundleServer), MainActivity 모드 결정·폴백·health, 설정 토글, 진단 머리.
+- CI: ci.yml(build·nightly)·release.yml에 Node 24 + pnpm + 번들 빌드 단계. `upstream-sync.yml` 신규.
+- 발견: Kotlin 블록 주석 안의 `/api/*`는 **중첩 주석 시작**이라 컴파일 오류("Unclosed comment") — 주석에는 `/api/…`로 쓴다.
+
+### 검증 (3차)
+| 명령 | 결과 |
+|---|---|
+| `UPSTREAM_DIR=… SKIP_INSTALL=1 PNPM=pnpm bash scripts/build-frontend.sh` | 233 files, 70MB, `BUNDLE.json` 생성 |
+| `.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleRelease` | BUILD SUCCESSFUL (테스트 19건), `[PocketRisuApp] bundled UI upstream v1.14.0`, `app-release.apk` 26.4MB |
+
 ### 미검증 / 다음
+- 번들 모드 실기기: 로그에 `mode=bundled v1.14.0 patchSync=…` → `I/Bundle healthy` 가 나와야 함. 안 나오면 `E/Bundle fallback …` 사유 확인.
 - 캐릭터 첫 진입 53초의 정체 — 새 nightly로 같은 동작 반복 후 로그 (키 이름 포함).
 - 실기기에서 설정 → 업데이트 확인 → 설치까지의 흐름(특히 `USER_ACTION_NOT_REQUIRED`가 One UI에서 적용되는지) — nightly 2개가 쌓이면 테스트 가능.
 - S7+ 설치·로그 — 사용자 확인 필요.

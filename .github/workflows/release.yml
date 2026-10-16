@@ -73,6 +73,15 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.1
+      - name: Build bundled PocketRisu UI (upstream.lock + patches/)
+        run: PNPM=pnpm scripts/build-frontend.sh
+
       - name: Unit tests
         run: ./gradlew --no-daemon --stacktrace :app:testReleaseUnitTest
 

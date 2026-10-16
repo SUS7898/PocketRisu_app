@@ -20,3 +20,6 @@ app/release/
 desktop.ini
 # Lockfile is generated on the fly in CI for vulnerability scanning
 gradle.lockfile
+# Bundled PocketRisu UI is produced by scripts/build-frontend.sh, never committed
+app/src/main/assets/bundle/
+build/upstream/

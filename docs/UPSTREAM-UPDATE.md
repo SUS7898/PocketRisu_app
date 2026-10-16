@@ -43,6 +43,15 @@ gh api "repos/PocketRisu/PocketRisu/compare/v1.14.0...v1.15.0" \
 | C13 | [2단계] 패치 적용 | `patches/*.patch`가 새 태그에 깨끗이 적용되는가 | CI `upstream-sync.yml` | 충돌 시 리베이스 |
 | C14 | 인증 흐름 | 비밀번호 → `POST /api/login` → 서버 JWT(5분) + `/api/token/refresh`; `/api/session` 쿠키 | `server.cjs` 3731~3800 | 자동 로그인(옵션) 로직 수정 |
 
+## 2a. 자동화된 부분 (`upstream-sync.yml`, 매일 12:17 KST)
+
+1. PocketRisu 최신 릴리스 태그가 `upstream.lock`보다 새로우면 그 태그로 `scripts/build-frontend.sh`(패치 적용 + 번들 빌드)를 시도한다.
+2. 성공 → **PR `upstream: PocketRisu vX.Y.Z`** 가 열린다(`upstream.lock`만 변경, 본문에 계약 파일 diff 요약).
+3. 실패 → 이슈 `upstream vX.Y.Z: 번들 빌드/패치 실패 — 리베이스 필요`.
+4. PR은 사람이 §2 체크리스트를 보고 병합한다. 병합되면 nightly가 새 번들로 빌드된다.
+
+번들 버전 ≠ 서버 버전이면 앱이 서버 UI로 자동 폴백하므로, PR을 늦게 병합해도 앱은 멈추지 않는다 — 번들 모드만 꺼진다.
+
 ## 3. 앱을 고쳐야 할 때
 
 1. 해당 모듈 수정 + 단위 테스트(`:app:testDebugUnitTest`).

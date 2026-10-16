@@ -15,10 +15,20 @@
 ## 빌드
 
 ```bash
+scripts/build-frontend.sh            # PocketRisu UI(upstream.lock 태그 + patches/) → app/src/main/assets/bundle/
 ./gradlew :app:testDebugUnitTest :app:assembleDebug
 ```
 
-Windows PowerShell: `.\gradlew.bat :app:assembleDebug`. JDK 17, Android SDK 35.
+Windows PowerShell: `.\gradlew.bat :app:assembleDebug`. JDK 17, Android SDK 35, Node 24, pnpm 10.34.1 (`npm i -g pnpm@10.34.1`). 번들 단계를 건너뛰면 앱은 빌드되지만 내장 UI 없이(항상 서버 UI) 동작한다.
+
+## UI 모드
+
+| 모드 | 언제 | 로그 |
+|---|---|---|
+| **bundled** | 설정 on + 내장 UI 버전 == 서버 버전 + 서버 `index.html`에서 `__PATCH_SYNC__` 읽힘 | `I/Shell mode=bundled v1.14.0 patchSync=…` → `I/Bundle healthy` |
+| **server-ui** | 그 외 전부(사유 포함), 또는 번들 모드가 30초 내 API 요청 없음·메인 프레임 오류·부트 전 크래시로 폴백 | `I/Shell mode=server-ui (…)` / `E/Bundle fallback to server-ui: …` |
+
+같은 번들 버전에서 2회 연속 폴백하면 그 버전은 비활성(설정에서 토글을 껐다 켜거나 다음 번들 버전에서 해제). 자세한 건 [docs/DESIGN.md §4](docs/DESIGN.md).
 
 릴리스(서명) 빌드는 저장소 루트의 `keystore.properties`(git-ignored) 또는 환경변수 `KEYSTORE_FILE / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD`를 읽는다. 없으면 디버그 키로 서명되며 배포하면 안 된다.
 

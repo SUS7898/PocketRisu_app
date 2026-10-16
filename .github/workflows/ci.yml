@@ -44,6 +44,15 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.1
+      - name: Build bundled PocketRisu UI (upstream.lock + patches/)
+        run: PNPM=pnpm scripts/build-frontend.sh
+
       - name: Unit tests
         run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest
 
@@ -122,6 +131,15 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.1
+      - name: Build bundled PocketRisu UI (upstream.lock + patches/)
+        run: PNPM=pnpm scripts/build-frontend.sh
+
       - name: Decode keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -162,6 +180,7 @@ jobs:
             echo "자동 빌드 — main 최신 커밋 ($(git rev-parse --short HEAD))"
             echo
             echo "- 버전: ${{ steps.version.outputs.name }}"
+            echo "- 내장 UI: PocketRisu $(tr -d '[:space:]' < upstream.lock) (패치 $(ls patches/*.patch 2>/dev/null | wc -l)개)"
             echo "- 커밋: ${{ github.sha }}"
             echo "- 빌드: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo

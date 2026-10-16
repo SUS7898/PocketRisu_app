@@ -159,6 +159,13 @@ PocketRisu 서버의 웹 UI를 그대로 쓰는 WebView 앱에, **네이티브 �
 
 판정 순서 요약: 서버 버전 읽기 → 번들 버전과 일치? → (예) 번들 UI 시도 → 실패 시 서버 UI / (아니오) 서버 UI. 1단계 APK에는 번들 모드가 없으므로 항상 서버 UI.
 
+### 4.1a 구현 (2026-10-16)
+- `scripts/build-frontend.sh`: `upstream.lock` 태그 체크아웃 → `patches/*.patch` 적용 → `vite build`(맵 없이) → `dist/`에서 `*.map`·`token/`(56MB 토크나이저)·`sample/`·대형 로고 2개를 뺀 **233개 파일 70MB**를 `app/src/main/assets/bundle/`에 복사 + `BUNDLE.json`(버전·sha·패치 수·파일 목록). 제외된 파일은 번들에 없으므로 서버로 통과(정확성 무관, 속도만 차이). APK는 약 26MB(압축).
+- 앱: `BundleRepository`(파일 목록·MIME) → `UiMode.decide`(순수 함수, 단위 테스트) → `BundleServer`(`GET /`·번들 파일을 `shouldInterceptRequest`에서 응답; `index.html` 첫 줄에 `__NODE__`·`__PATCH_SYNC__` 주입) → `MainActivity`가 실행 시 서버 버전·`__PATCH_SYNC__`를 각 6초 상한으로 조회해 모드 결정.
+- 런타임 폴백: 번들 모드에서 30초 내 `/api/*` 요청이 하나도 관찰되지 않음 / 메인 프레임 오류 / 부트 전 렌더러 크래시 → `fallbackToServerUi(reason)`: 실패 횟수 기록(2회면 그 번들 버전 비활성), 서버 UI로 재로드, 토스트. 첫 `/api/*` 관찰 시 `healthy` 기록·실패 횟수 초기화. 로그인 전에도 `/api/test_auth`가 호출되므로 비밀번호 입력 대기가 폴백으로 오인되지 않는다.
+- 설정: "번들 UI 사용" 토글(기본 on) + 내장 버전·현재 모드 표시. 진단 머리에 `mode:`·`bundle:` 줄.
+- 번들 안에 없는 것: `/api/*` 전부, `token/`, `sample/` — 서버 그대로.
+
 ### 4.2 포크 관리
 - `upstream/` 서브모듈이 아니라 **upstream 태그 + `patches/*.patch`**(git format-patch). 브랜치 분기 금지. 패치 0개로도 번들 모드는 성립해야 한다(순수 upstream 빌드).
 - 패치 후보(측정 후 우선순위): 삽화 `loading=lazy` + 썸네일→원본 교체, 긴 채팅 메시지 가상화, 삽화 12장 병렬 생성(`stableDiff.ts`), 홈 캐릭터 목록 지연 렌더링.
@@ -224,8 +231,8 @@ PocketRisu_app/
 9. `SECURITY-REVIEW.md` 1차 + CI 게이트
 
 ### 2단계 (C 범위) — 측정 결과가 요구할 때
-10. 번들 모드 + 버전 게이트 + 런타임 폴백 (패치 0개로 upstream 빌드 번들)
-11. `upstream-sync.yml` 자동 추종 파이프라인
+10. 번들 모드 + 버전 게이트 + 런타임 폴백 (패치 0개로 upstream 빌드 번들) — **구현됨 2026-10-16 (실기기 검증 대기)**
+11. `upstream-sync.yml` 자동 추종 파이프라인 — **구현됨 2026-10-16** (매일 12:17 KST, 성공 시 PR / 실패 시 이슈)
 12. 렌더링 패치(측정 상위 병목부터; 삽화 lazy는 1단계 캐시로 해소됐을 가능성이 커서 재측정 후 결정)
 13. 자동 로그인(옵션), 프리페치 트리거 C(토큰 갱신 포함)
 14. 내보내기 "화면 그대로"·ZIP 옵션

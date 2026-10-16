@@ -32,6 +32,31 @@ class AppSettings(context: Context) {
         get() = prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L)
         set(value) = prefs.edit { putLong(KEY_LAST_UPDATE_CHECK, value) }
 
+    /** Bundled UI mode (docs/DESIGN.md §4). Default on; the version gate decides per launch. */
+    var bundleEnabled: Boolean
+        get() = prefs.getBoolean(KEY_BUNDLE_ENABLED, true)
+        set(value) = prefs.edit { putBoolean(KEY_BUNDLE_ENABLED, value) }
+
+    /** Bundle version switched off after two consecutive runtime failures; cleared when a bundle works. */
+    var bundleDisabledForVersion: String?
+        get() = prefs.getString(KEY_BUNDLE_DISABLED_FOR, null)
+        set(value) = prefs.edit { putString(KEY_BUNDLE_DISABLED_FOR, value) }
+
+    fun bundleFailures(version: String): Int = prefs.getInt("$KEY_BUNDLE_FAILS.$version", 0)
+
+    /** Returns the new consecutive failure count. */
+    fun recordBundleFailure(version: String): Int {
+        val n = bundleFailures(version) + 1
+        prefs.edit { putInt("$KEY_BUNDLE_FAILS.$version", n) }
+        if (n >= BUNDLE_MAX_FAILURES) bundleDisabledForVersion = version
+        return n
+    }
+
+    fun recordBundleHealthy(version: String) {
+        prefs.edit { putInt("$KEY_BUNDLE_FAILS.$version", 0) }
+        if (bundleDisabledForVersion == version) bundleDisabledForVersion = null
+    }
+
     fun serverHttpUrl(): HttpUrl? = serverUrl?.toHttpUrlOrNull()
 
     fun serverHost(): String? = serverHttpUrl()?.host
@@ -42,6 +67,10 @@ class AppSettings(context: Context) {
         private const val KEY_LAST_SERVER_INFO = "lastServerInfo"
         private const val KEY_NIGHTLY = "nightlyChannel"
         private const val KEY_LAST_UPDATE_CHECK = "lastUpdateCheckMs"
+        private const val KEY_BUNDLE_ENABLED = "bundleEnabled"
+        private const val KEY_BUNDLE_DISABLED_FOR = "bundleDisabledForVersion"
+        private const val KEY_BUNDLE_FAILS = "bundleFailures"
+        const val BUNDLE_MAX_FAILURES = 2
 
         /** Validates user input; returns the normalised base URL or null. */
         fun normalizeServerUrl(raw: String, allowHttp: Boolean): String? {

@@ -6,6 +6,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
@@ -26,17 +28,28 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewCompat
 import com.sus7898.pocketrisu.R
+import com.sus7898.pocketrisu.bundle.BundleRepository
+import com.sus7898.pocketrisu.bundle.BundleServer
+import com.sus7898.pocketrisu.bundle.ServerIndexProbe
+import com.sus7898.pocketrisu.bundle.UiMode
+import com.sus7898.pocketrisu.bundle.UiModeState
 import com.sus7898.pocketrisu.databinding.ActivityMainBinding
 import com.sus7898.pocketrisu.intercept.RequestObserver
 import com.sus7898.pocketrisu.log.AppLog
 import com.sus7898.pocketrisu.net.Http
+import com.sus7898.pocketrisu.net.ServerProbe
 import com.sus7898.pocketrisu.settings.AppSettings
 import com.sus7898.pocketrisu.update.UpdateChecker
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * WebView shell (docs/DESIGN.md §3.1). Milestone 1: the server UI is loaded as-is; the
- * interception hook only observes the API routes that later milestones will cache.
+ * WebView shell (docs/DESIGN.md §3.1) with the bundled-UI version gate and runtime fallback (§4.1).
+ * Launch: decide the mode (bundle enabled? bundle present? server version == bundle version?
+ * __PATCH_SYNC__ readable?) → load. In bundled mode the interceptor serves index.html and the
+ * hashed assets from the APK; every API request still goes to the server.
  */
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -44,6 +57,12 @@ class MainActivity : AppCompatActivity() {
     private var webView: WebView? = null
     private var lastBackPressMs = 0L
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+
+    private var bundleServer: BundleServer? = null
+    private var bundleVersionInUse: String? = null
+    private var apiSeen = false
+    private val handler = Handler(Looper.getMainLooper())
+    private val healthCheck = Runnable { if (!apiSeen) fallbackToServerUi("no /api traffic within ${HEALTH_TIMEOUT_MS / 1000}s") }
 
     private val fileChooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val uris = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
@@ -84,24 +103,64 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        createWebView(base, savedInstanceState)
-        AppLog.i(TAG, "mode=server-ui")
+        lifecycleScope.launch {
+            val mode = decideMode(base)
+            UiModeState.current = mode
+            AppLog.i(TAG, "mode=${mode.describe()}")
+            if (mode is UiMode.Bundled) {
+                bundleServer = BundleServer(BundleRepository(this@MainActivity), Uri.parse(base).host ?: "", mode.patchSync)
+                bundleVersionInUse = mode.upstreamVersion
+            }
+            createWebView(base, savedInstanceState)
+        }
         checkForUpdateDaily()
     }
 
-    /** At most once a day: tell the user an update exists; installing stays a manual step in Settings. */
-    private fun checkForUpdateDaily() {
-        val now = System.currentTimeMillis()
-        if (now - settings.lastUpdateCheckMs < 24 * 60 * 60 * 1000L) return
-        lifecycleScope.launch {
-            val channel = if (settings.nightlyChannel) UpdateChecker.Channel.NIGHTLY else UpdateChecker.Channel.STABLE
-            UpdateChecker.fetchLatest(channel).onSuccess { rel ->
-                settings.lastUpdateCheckMs = now
-                if (rel.isNewer) {
-                    Toast.makeText(this@MainActivity, getString(R.string.update_available_toast, rel.versionName), Toast.LENGTH_LONG).show()
-                }
-            }
+    /** Gathers the inputs of UiMode.decide; each probe is capped so launch never hangs on the network. */
+    private suspend fun decideMode(base: String): UiMode {
+        val repo = BundleRepository(this)
+        if (!settings.bundleEnabled || !repo.available) {
+            return UiMode.decide(settings.bundleEnabled, repo.version, null, settings.bundleDisabledForVersion, null)
         }
+        val bundleVersion = repo.version
+        if (settings.bundleDisabledForVersion == bundleVersion) {
+            return UiMode.decide(true, bundleVersion, null, settings.bundleDisabledForVersion, null)
+        }
+        return coroutineScope {
+            val server = async { withTimeoutOrNull(PROBE_TIMEOUT_MS) { ServerProbe.probe(base).getOrNull() } }
+            val patchSync = async { withTimeoutOrNull(PROBE_TIMEOUT_MS) { ServerIndexProbe.fetchPatchSync(base) } }
+            val serverVersion = server.await()?.version
+            if (serverVersion != null) settings.lastServerInfo = "version $serverVersion (deploymentType=${server.await()?.deploymentType})"
+            UiMode.decide(true, bundleVersion, serverVersion, settings.bundleDisabledForVersion, patchSync.await())
+        }
+    }
+
+    /** Bundled UI misbehaved: count it, maybe disable the bundle version, and reload the server UI. */
+    private fun fallbackToServerUi(reason: String) {
+        val version = bundleVersionInUse ?: return
+        handler.removeCallbacks(healthCheck)
+        val failures = settings.recordBundleFailure(version)
+        AppLog.e("Bundle", "fallback to server-ui: $reason (failure $failures/${AppSettings.BUNDLE_MAX_FAILURES} for v$version)")
+        bundleServer = null
+        bundleVersionInUse = null
+        UiModeState.current = UiMode.ServerUi("fallback: $reason")
+        Toast.makeText(this, getString(R.string.bundle_fallback_toast, reason), Toast.LENGTH_LONG).show()
+        val base = settings.serverUrl ?: return
+        webView?.let { old ->
+            binding.webViewContainer.removeView(old)
+            old.destroy()
+        }
+        webView = null
+        createWebView(base, null)
+    }
+
+    private fun markApiSeen() {
+        if (apiSeen) return
+        apiSeen = true
+        val version = bundleVersionInUse ?: return
+        handler.removeCallbacks(healthCheck)
+        settings.recordBundleHealthy(version)
+        AppLog.i("Bundle", "healthy: first /api request observed (served ${bundleServer?.served} bundle files)")
     }
 
     override fun onResume() {
@@ -121,12 +180,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(healthCheck)
         webView?.let {
             binding.webViewContainer.removeView(it)
             it.destroy()
         }
         webView = null
         super.onDestroy()
+    }
+
+    /** At most once a day: tell the user an update exists; installing stays a manual step in Settings. */
+    private fun checkForUpdateDaily() {
+        val now = System.currentTimeMillis()
+        if (now - settings.lastUpdateCheckMs < 24 * 60 * 60 * 1000L) return
+        lifecycleScope.launch {
+            val channel = if (settings.nightlyChannel) UpdateChecker.Channel.NIGHTLY else UpdateChecker.Channel.STABLE
+            UpdateChecker.fetchLatest(channel).onSuccess { rel ->
+                settings.lastUpdateCheckMs = now
+                if (rel.isNewer) {
+                    Toast.makeText(this@MainActivity, getString(R.string.update_available_toast, rel.versionName), Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -164,6 +239,11 @@ class MainActivity : AppCompatActivity() {
         val pkg = WebViewCompat.getCurrentWebViewPackage(this)
         AppLog.i(TAG, "WebView ready ${pkg?.packageName ?: "?"} ${pkg?.versionName ?: "?"}")
 
+        apiSeen = false
+        if (bundleVersionInUse != null) {
+            handler.removeCallbacks(healthCheck)
+            handler.postDelayed(healthCheck, HEALTH_TIMEOUT_MS)
+        }
         if (savedState != null && wv.restoreState(savedState) != null) {
             AppLog.d(TAG, "state restored")
         } else {
@@ -205,9 +285,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-            // Milestone 1: observe only. Milestone 2 adds the tee/measure layer here (DESIGN.md §3.2).
-            // /api/read is the generic KV read: the key travels in the `file-path` header (hex), so
-            // the key prefix is what tells bootstrap (database/database.bin) apart from asset reads.
+            // Bundled UI files come from the APK; everything else (all /api/*) goes to the server.
+            bundleServer?.intercept(request)?.let { return it }
+            val path = request.url.encodedPath
+            if (path != null && path.startsWith("/api/") && request.url.host.equals(baseHost, ignoreCase = true)) {
+                runOnUiThread { markApiSeen() }
+            }
+            // Milestone 1 observation; the tee/measure layer replaces this (DESIGN.md §3.2).
             if (request.method == "GET") RequestObserver.observe(request)
             return null
         }
@@ -219,6 +303,10 @@ class MainActivity : AppCompatActivity() {
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
             if (!request.isForMainFrame) return
             AppLog.e(TAG, "main frame error code=${error.errorCode} desc=${error.description}")
+            if (bundleVersionInUse != null) {
+                fallbackToServerUi("main frame error ${error.errorCode}")
+                return
+            }
             Toast.makeText(this@MainActivity, getString(R.string.page_error, error.description), Toast.LENGTH_LONG).show()
         }
 
@@ -228,6 +316,11 @@ class MainActivity : AppCompatActivity() {
             binding.webViewContainer.removeView(view)
             view.destroy()
             webView = null
+            if (bundleVersionInUse != null && !apiSeen) {
+                // Crashed before the bundled UI ever talked to the server: treat as a bundle failure.
+                fallbackToServerUi("renderer gone before boot")
+                return true
+            }
             Toast.makeText(this@MainActivity, R.string.renderer_restarted, Toast.LENGTH_LONG).show()
             createWebView(base, null)
             if (lastUrl != null) webView?.loadUrl(lastUrl)
@@ -262,5 +355,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "Shell"
+        private const val PROBE_TIMEOUT_MS = 6_000L
+        private const val HEALTH_TIMEOUT_MS = 30_000L
     }
 }

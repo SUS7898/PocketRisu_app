@@ -10,6 +10,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.sus7898.pocketrisu.BuildConfig
 import com.sus7898.pocketrisu.R
+import com.sus7898.pocketrisu.bundle.BundleRepository
+import com.sus7898.pocketrisu.bundle.UiModeState
 import com.sus7898.pocketrisu.databinding.ActivitySettingsBinding
 import com.sus7898.pocketrisu.log.AppLog
 import com.sus7898.pocketrisu.settings.AppSettings
@@ -46,6 +48,12 @@ class SettingsActivity : AppCompatActivity() {
             binding.installButton.visibility = View.GONE
             binding.updateStatus.text = ""
         }
+        binding.bundleSwitch.isChecked = settings.bundleEnabled
+        binding.bundleSwitch.setOnCheckedChangeListener { _, checked ->
+            settings.bundleEnabled = checked
+            AppLog.i("Bundle", "setting bundleEnabled=$checked")
+            renderBundle()
+        }
         binding.checkButton.setOnClickListener { check() }
         binding.installButton.setOnClickListener { found?.let { downloadAndInstall(it) } }
         binding.releaseLink.setOnClickListener {
@@ -63,6 +71,13 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun renderServer() {
         binding.serverValue.text = settings.serverHost() ?: getString(R.string.settings_server_unset)
+        renderBundle()
+    }
+
+    private fun renderBundle() {
+        val repo = BundleRepository(this)
+        val bundle = if (repo.available) "v${repo.version} (${repo.manifest?.fileCount} files)" else getString(R.string.settings_bundle_none)
+        binding.bundleStatus.text = getString(R.string.settings_bundle_status, bundle, UiModeState.current.describe())
     }
 
     private fun channel() = if (settings.nightlyChannel) UpdateChecker.Channel.NIGHTLY else UpdateChecker.Channel.STABLE
