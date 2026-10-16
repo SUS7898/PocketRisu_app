@@ -87,7 +87,12 @@
 | `UPSTREAM_DIR=… SKIP_INSTALL=1 PNPM=pnpm bash scripts/build-frontend.sh` | 233 files, 70MB, `BUNDLE.json` 생성 |
 | `.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleRelease` | BUILD SUCCESSFUL (테스트 19건), `[PocketRisuApp] bundled UI upstream v1.14.0`, `app-release.apk` 26.4MB |
 
+### 실기기 4차 (dev.2, RequestObserver 키 포함) — 채팅 열기 실패 원인 특정
+- 부트스트랩 `database/database.bin` → 홈 표시까지 **13초**(S26). 플러그인 저장소 6건 읽기 후 chat-content 요청이 **정확히 30.000초 뒤 재시도** = 클라이언트 첫 바이트 타임아웃. 다른 채팅은 즉시 열림 → 서버가 그 시점에 30초+ 막혀 있었음. 상세·가설·확인 방법은 T-7.
+- 첫 패치 `patches/010-chat-first-byte-timeout-120s.patch` 작성(번들 모드 전용). `build-frontend.sh`로 적용·빌드 검증.
+
 ### 미검증 / 다음
+- T-7 서버 로그 확인(사용자: `docker logs --since 5m risuai-nodeonly`).
 - 번들 모드 실기기: 로그에 `mode=bundled v1.14.0 patchSync=…` → `I/Bundle healthy` 가 나와야 함. 안 나오면 `E/Bundle fallback …` 사유 확인.
 - 캐릭터 첫 진입 53초의 정체 — 새 nightly로 같은 동작 반복 후 로그 (키 이름 포함).
 - 실기기에서 설정 → 업데이트 확인 → 설치까지의 흐름(특히 `USER_ACTION_NOT_REQUIRED`가 One UI에서 적용되는지) — nightly 2개가 쌓이면 테스트 가능.

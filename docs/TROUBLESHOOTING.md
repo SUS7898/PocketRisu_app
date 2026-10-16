@@ -50,6 +50,26 @@
 - 해결: `--% -PappVersionName="0.1.0-dev.3+abc1234"`(stop-parsing 토큰)로 그대로 전달. CI(bash)는 영향 없음.
 - 재발 방지: `app/build.gradle.kts`가 계산된 버전을 `[PocketRisuApp] version … (code …)`로 항상 출력.
 
+## T-7. 채팅(캐릭터) 첫 진입이 오래 걸리고 한 번은 실패함
+- 발생: 2026-10-16 14:44, S26 Ultra, 앱 0.1.0-dev.2(code 10002, 서버 UI 모드), 서버 v1.14.0 docker, "거의 빈 채팅방"
+- 증상(로그):
+  ```
+  14:43:55.245 I/Intercept read key=database/database.bin        ← 부트스트랩 시작
+  14:44:08.198 I/Intercept asset requests n=50 assets=51           ← 홈 표시 (부트스트랩 ≈ 13초)
+  14:44:08~10   I/Intercept read key=plugin-storage/ …  (6건)
+  14:44:16.812 I/Intercept chat-content chaId=1f31be28 idx=1 delta=false   ← 채팅 열기
+  14:44:46.812 I/Intercept chat-content chaId=1f31be28 idx=1 delta=false   ← 정확히 +30.000초: 클라이언트 재시도
+  14:45:22.750 I/Intercept chat-content chaId=1f31be28 idx=0 delta=false   ← 다른 채팅은 바로 열림
+  ```
+  두 번째 요청이 정확히 30.000초 뒤 = 클라이언트 `FIRST_BYTE_TIMEOUT_MS = 30_000`(`nodeStorage.ts:19`) 만료 → 1회 재시도. 재시도도 30초면 "실패"로 보임. 즉 **서버가 30초 넘게 첫 바이트를 못 보낸 것**이고 기기 쪽 문제가 아니다(같은 서버의 다른 채팅은 즉시 열림).
+- 원인(가설, 서버 로그로 확정 필요): PocketRisu 서버는 Node 단일 스레드라 100MB+ DB의 동기 작업(패치 후 지연 저장 `saveTimers` → 전체 DB 재조립·msgpack 인코딩·SQLite 쓰기, 부트스트랩 시 `loadDbCacheIfMissing({createBackup:true})`의 백업 생성, `encodeRisuSaveLegacy` 100MB)이 돌면 **그동안 모든 요청이 멈춘다**. 부트스트랩 직후 클라이언트의 자동 쓰기(boot housekeeping → `/api/patch`)가 지연 저장 타이머를 걸고, 그 저장이 NAS CPU에서 수십 초 걸리는 동안 chat-content가 대기했을 가능성이 가장 크다. 이전 Chrome에서 "다른 채팅 갔다가 돌아오면 열림"도 같은 현상(저장이 끝난 뒤 재요청)으로 설명된다.
+- 확인 방법(사용자): 증상 직후 NAS에서 `docker logs --since 5m risuai-nodeonly` 를 보거나 PocketRisu 설정의 로그 화면에서 14:44:16~14:45:20 사이 `[Save]`·`[Patch]`·`[Backup]`·`[Archive]` 줄과 걸린 시간을 확인. 앱 쪽은 마일스톤 2 계측(첫 바이트 ms)으로 서버 지연을 수치화.
+- 조치:
+  1. `patches/010-chat-first-byte-timeout-120s.patch` — 번들 모드에서 첫 바이트 대기 30초→120초. 느린 건 그대로지만 **실패로 끝나지 않는다**. 서버 UI 모드에는 적용되지 않음(서버의 JS).
+  2. 근본: upstream 이슈 후보 — ① `ensureChatStore()`에 진행 중 가드가 없어 재시도가 디코드를 두 번 돌릴 수 있음, ② 지연 저장이 요청 처리를 막음(워커 스레드/비동기 인코딩 필요). 서버 로그로 확정되면 PocketRisu에 제보.
+  3. 사용자 측 완화: 캐릭터 비활성화(archive)로 DB를 줄이면 모든 동기 작업이 비례해서 짧아진다.
+- 재발 방지: 이 항목 + UPSTREAM-UPDATE C6에 "첫 바이트 타임아웃 상수 위치" 추가.
+
 ## T-2. 서버 주소가 http:// 이면 접속 거부
 - 발생: 설계상 의도된 동작
 - 증상: 설정 화면에서 "HTTPS 주소만 허용" 오류

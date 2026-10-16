@@ -1,0 +1,16 @@
+diff --git a/src/ts/storage/nodeStorage.ts b/src/ts/storage/nodeStorage.ts
+index a0753e7..f516153 100644
+--- a/src/ts/storage/nodeStorage.ts
++++ b/src/ts/storage/nodeStorage.ts
+@@ -16,7 +16,10 @@ const AUTH_FETCH_TRANSIENT_BASE_DELAY_MS = 500
+ const AUTH_FETCH_TRANSIENT_JITTER_MIN = 0.5
+ const AUTH_FETCH_TRANSIENT_JITTER_MAX = 1.5
+ const AUTH_FETCH_TRANSIENT_STATUS = new Set([502, 503, 504])
+-const FIRST_BYTE_TIMEOUT_MS = 30_000
++// [PocketRisu_app patch 010] 30s → 120s: a Synology NAS can block the single Node thread for
++// longer than 30s on large databases; the 30s abort + retry turned a slow chat open into a
++// failed one (docs/TROUBLESHOOTING.md T-7). The retry for half-open links is kept.
++const FIRST_BYTE_TIMEOUT_MS = 120_000
+ 
+ export type StorageFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+ 

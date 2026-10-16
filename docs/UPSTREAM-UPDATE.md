@@ -34,6 +34,7 @@ gh api "repos/PocketRisu/PocketRisu/compare/v1.14.0...v1.15.0" \
 | C4 | 삽화 캐시 | `GET /api/asset/:hex` — `Cache-Control: immutable`, `ETag`, 키 = hex(`inlay/<id>` 등), `inlay_thumb/` 썸네일 | `server.cjs` `/api/asset` | `AssetCache` 키 규칙·무효화 정책 재검토 |
 | C5 | db.bin 조건부 캐시 | `GET /api/read` + 헤더 `file-path`(hex), 응답 헤더 `x-db-etag`, `If-None-Match` 304 | `server.cjs` `/api/read`, `nodeStorage.ts` `_lastDbEtag` | `DbBlobCache` 수정 |
 | C6 | 채팅 본문 캐시·폴백 | `GET /api/chat-content/:chaId/:idx` + 헤더 `x-chat-id`, 델타 헤더 `x-chat-base-count/fp`, 응답 `Vary` | `server.cjs` `sendChatContent` | 델타 헤더 있으면 **가로채지 않는** 규칙 유지 여부 확인 |
+| C6a | 패치 010 (첫 바이트 타임아웃 120초) | `const FIRST_BYTE_TIMEOUT_MS = 30_000` 한 줄 | `src/ts/storage/nodeStorage.ts` 상단 | 상수가 옮겨지면 패치 재생성; upstream이 직접 늘리면 패치 삭제 |
 | C7 | 읽기 전용 디코더 | `RISUSAVE` 매직 11B, 버전 7(msgpack)·8(zlib)·9(gzip), msgpackr `useRecords:false`, `int64AsType:'number'` | `risuSave.ts` 상단 | 디코더 버전 분기 추가. **새 버전 바이트가 나오면 디코더는 자동 비활성(폴백)** |
 | C8 | 채팅 쓰기 후 캐시 무효화 | 쓰기 경로 = `POST /api/chat-content/:chaId/:idx`, `POST /api/patch`, `POST /api/write` | `server.cjs` 해당 라우트 | 무효화 트리거 경로 목록 갱신 |
 | C9 | 삽화 생성 직후 프리페치 | 삽화 업로드 경로와 키 형식 (`/api/write` + `file-path`=hex(`inlay/...`)) | `stableDiff.ts`, `globalApi.svelte.ts` 업로드부 | 트리거 B 경로 수정 |
