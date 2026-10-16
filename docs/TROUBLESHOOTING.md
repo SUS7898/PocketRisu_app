@@ -86,6 +86,17 @@
 - **dev.5 (15:13~15:15, 쓰기 요청 기록 추가 후)**: 채팅 3개(`1f31be28/1`, `0d840f92/0`, `76fe045e/0`)가 **재시도 없이 정상**으로 열림. `POST write key=database/database.bin`은 **없었음** → 이 세션에서는 전체 업로드 가설이 성립하지 않음. 쓰기는 `POST patch`(여러 번)·`chat-content save delta=true`·`plugin-storage` 뿐 = 정상 패턴. 다만 부트스트랩→홈이 **53초**(이전 13~16초)로 느렸고, 직전(15:02~15:06)에 서버 연결 자체가 4분간 실패(T-9)했으므로 **네트워크 경로(공인 IP/NAT 루프백)** 쪽 가능성이 커짐.
 - **플러그인 발견**: `[WygLore Leaf 3.1.0] gzip 마이그레이션 3회 시도 후 자동 skip. 옛 plain payload가 큰 환경(78MB+)…` — WygLore 플러그인이 **78MB+ 옛 데이터**를 plugin-storage에 들고 있어 매 부팅마다 읽고(`read key=plugin-storage/ d2wu…` = `wl.*` 키들) 마이그레이션을 시도한다. 부팅·홈 지연과 서버 부하의 큰 몫일 수 있음. 플러그인 자체 안내: "옮기기·복구 탭 → 백업·정리 → [옛 잔류·대용량·미연결 정리] → [저장 사용량 확인]에서 삭제(PC 권장)" 또는 응급 `localStorage.setItem("wl.disable","1")`.
 - 현재 판단: 지연 원인 후보는 ① 네트워크 경로(T-9 참고) ② 서버 단일 스레드 정지(패치/백업/대용량 플러그인 저장소) ③ WygLore 78MB 페이로드. 앱 쪽 계측(M2)으로 ①②를 가르고, ③은 사용자가 정리하면 바로 비교 가능.
+- **결정적 단서 (18:09 세션, dev.8 번들 모드)**: 쓰기 기록이 있는 세션 4개를 겹쳐 보면 패턴이 하나다.
+  | 세션 | `POST /api/db/flush` 시각 | 첫 채팅 열기 | 결과 |
+  |---|---|---|---|
+  | 15:13 (dev.5) | 15:15:10 | 15:14:05 / 15:14:20 / 15:14:44 (**flush 전**) | 모두 즉시 |
+  | 16:53 (dev.7) | 16:53:27 | 16:53:23 (**flush 전**) | 즉시 |
+  | 18:09 (dev.8) | 18:09:38 | 18:10:26 (**flush 후**) | 120초 무응답 → 재시도 |
+  | 14:44 (dev.2) | (쓰기 미기록) | 14:44:16 | 30초 무응답 → 재시도 |
+  `/api/db/flush`는 클라이언트가 **`visibilitychange: hidden`(앱 전환·화면 꺼짐)과 `pagehide` 때마다** 보내는 요청으로(`globalApi.svelte.ts` `flushImmediate → flushServerDbKeepalive`), 서버는 `flushPendingDb()` = **전체 DB(채팅 포함) 재조립 + msgpack 인코딩 + SQLite 쓰기 + 백업 생성**을 `queueStorageOperation` 안에서 즉시 수행한다. NAS에서 100MB+ DB면 수십 초~분 단위이고, 그동안 다른 요청이 뒤에 선다. 사용자가 다른 앱에 갔다가 돌아와 채팅을 열면 정확히 이 작업 뒤에서 기다리게 된다 — "다른 앱 갔다 오면 느리다/안 열린다"와 일치.
+  브라우저에서는 탭이 죽기 전 마지막 저장 수단이라 합리적이지만, 이 앱은 WebView를 살려 두므로 매번 강제할 이유가 없다 — 서버는 패치마다 자체 타이머(`SAVE_INTERVAL = 5000ms`, 마지막 패치 5초 뒤)로 어차피 같은 저장을 수행하므로, 생략해도 저장 자체는 최대 5초 늦어질 뿐이다.
+- **조치**: `patches/020-skip-forced-flush-on-hide-in-app.patch` — 번들 모드(`__POCKETRISU_APP_BUNDLE__`)에서는 `flushImmediate`가 패치 저장(`triggerSave`)만 하고 `/api/db/flush`는 보내지 않는다. 서버 UI 모드에는 적용 불가. 효과 확인: dev.9 로그에서 `POST /api/db/flush`가 **사라지고** 첫 채팅 열기 재시도가 없어야 한다.
+- upstream 제보 후보: ① 포그라운드 복귀 직후 채팅 요청이 flush 뒤에 서는 문제(flush를 비차단/점진으로) ② `ensureChatStore()` 진행 중 가드 부재.
 
 ## T-9. 앱 실행 후 44초 동안 빈 화면, 그 뒤 `mode=server-ui (server version unknown)`
 - 발생: 2026-10-16 15:12~15:13, dev.5, S26. 직전 15:02~15:06에는 `GET /api/update-check failed after 271611ms — ConnectException … :443`(서버 4분 넘게 연결 불가).
@@ -130,6 +141,12 @@
 - 원인: 플러그인 내부(3.1.0, "gzip 마이그레이션 3회 시도" 경고와 같은 세션). 앱이 막을 수는 없고 막아서도 안 된다(플러그인 데이터 무결성).
 - 조치(사용자): WygLore Leaf를 3.2.0으로 올렸으면 재발 여부 확인 → 로그에서 `read key=plugin-storage/ d2wud2ViLnYx` 가 분당 수백 건이면 플러그인을 끄고 비교. 옛 78MB 페이로드 정리는 T-7 참고.
 - 앱 측: 진단 화면에 "plugin-storage 읽기 분당 건수" 집계를 추가해 재발을 바로 보이게 함(마일스톤 2 계측에 포함).
+
+## T-14. 한 시간 뒤 앱으로 돌아오자 `[Storage] No response headers within 120000ms` 경고 253개가 같은 밀리초에 쏟아짐
+- 발생: 2026-10-16 18:01:14, dev.7(keep-alive 없음). 16:53:38 이후 67분간 로그 공백 → 복귀 순간 `asset-manifests` 요청 253건의 타임아웃 경고가 동시에 기록, 이어 `[ModelJobRecovery] discovery failed TypeError: Failed to fetch`.
+- 원인: Android의 **캐시 앱 동결(cached-apps freezer)**. 백그라운드에서 프로세스가 통째로 멈춰 진행 중이던 fetch와 타이머가 함께 정지했다가, 복귀 시 한꺼번에 깨어나 모두 "120초 경과"로 판정됨. 서버 장애가 아니라 동결 아티팩트. 연결은 끊겨 있어 재시도가 다시 나간다(서버에 253건 재요청 = 복귀 직후 부하).
+- 해결: dev.8의 keep-alive 포그라운드 서비스 — 포그라운드 서비스를 가진 프로세스는 동결 대상에서 제외된다. dev.8 이후 로그에서 같은 패턴이 사라지는지 확인.
+- 참고: 이 세션은 67분 백그라운드 뒤에도 렌더러가 살아 돌아왔다(`renderer gone` 없음). 즉 T-12의 종료는 메모리 압박이 있을 때만 일어난다.
 
 ## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패
 - 발생: 2026-10-16 14:58, S26 Ultra(One UI, Android 17), dev.2 → dev.4 첫 시도. 두 번째 시도는 성공.

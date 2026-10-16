@@ -110,7 +110,14 @@
 - `wl.web.v1` 6,370회/10분 읽기 폭주(WygLore Leaf 3.1.0) 발견. 230회 patch, db.bin 전체 쓰기 0회, `[Save] Patch conflict with a foreign revision, rebasing` 1회(다른 기기/탭 동시 사용?).
 - 번들 모드 재시작 2회 모두 `healthy`, page finished 0.2~0.4초.
 
+### 실기기 8차 (592KB 로그, dev.7→dev.8) — 채팅 지연의 결정적 패턴, 동결 아티팩트
+- 4개 세션 대조: `/api/db/flush` **뒤**의 첫 채팅 열기만 120초 무응답, **앞**의 것은 즉시. flush = 클라이언트가 `visibilitychange: hidden`마다 보내는 "전체 DB 저장+백업" 강제 요청 → 패치 020으로 번들 모드에서 생략(T-7 결론).
+- 67분 백그라운드 후 복귀 시 asset-manifests 타임아웃 253건 동시 발생 = 캐시 앱 동결 아티팩트(T-14). keep-alive가 해결해야 함.
+- dev.8 첫 실행: `KeepAlive started` → `bundled` → `healthy`. 설치 재시도 시 `reusing downloaded` 동작 확인.
+- 번들 재빌드: 패치 2개 적용.
+
 ### 미검증 / 다음
+- dev.9 로그: `POST /api/db/flush` 부재 + 첫 채팅 열기 재시도 없음 확인.
 - T-12: keep-alive 켠 상태에서 앱 전환 후 복귀 시 `renderer gone` 재발 여부.
 - T-11 실기기 확인(세로/가로/키보드/분할 화면).
 - 사용자 조치 권고: WygLore 옛 데이터 정리, Wi-Fi에서 내부 주소/Tailscale로 접속 비교.

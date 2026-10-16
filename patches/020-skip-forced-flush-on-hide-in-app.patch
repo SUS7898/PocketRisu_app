@@ -1,0 +1,19 @@
+diff --git a/src/ts/globalApi.svelte.ts b/src/ts/globalApi.svelte.ts
+index cb7d6b5..9a3626c 100644
+--- a/src/ts/globalApi.svelte.ts
++++ b/src/ts/globalApi.svelte.ts
+@@ -801,6 +801,14 @@ export async function saveDb() {
+             void triggerSave({
+                 skipBroadcast: true,
+             })
++            // [PocketRisu_app patch 020] Inside the Android app the page is not about to die on
++            // every visibilitychange (the shell keeps the WebView alive), but /api/db/flush makes
++            // the server reassemble + encode + persist the whole database and cut a backup — on a
++            // NAS with a 100MB+ database that blocks every other request for minutes, which is
++            // exactly when the user comes back and opens a chat (docs/TROUBLESHOOTING.md T-7).
++            // The server's own debounced persist still runs after each patch; only the forced,
++            // immediate flush is skipped here.
++            if ((globalThis as any).__POCKETRISU_APP_BUNDLE__) return
+             void flushServerDbKeepalive()
+         }
+         document.addEventListener('visibilitychange', () => {
