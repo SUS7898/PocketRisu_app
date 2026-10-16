@@ -36,6 +36,20 @@
 - 해결: 마지막 성공 결과를 설정(`lastServerInfo`)에 저장해 응답 전에는 `[cached]` 표기로 사용. 진단 액티비티에 `configChanges` 추가로 회전·분할 시 재생성 방지.
 - 재발 방지: 머리 정보는 "없음"보다 "마지막 값 + 표시"를 원칙으로.
 
+## T-5. 첫 CI·Release 실행이 30초 만에 `./gradlew: Permission denied`로 실패
+- 발생: 2026-10-16, 첫 push (run 38852569926, 38852771559)
+- 증상: Unit tests 단계에서 exit 126.
+- 원인: Windows에서 `cp`로 가져온 `gradlew`가 git 인덱스에 `100644`로 들어감(`core.filemode=false`라 실행 비트를 추적하지 않음).
+- 해결: `git update-index --chmod=+x gradlew` 후 커밋. v0.1.0 태그는 릴리스가 나오기 전이라 새 커밋으로 옮김.
+- 재발 방지: 저장소에 실행 파일을 추가할 때 `git ls-files -s <file>`로 `100755` 확인.
+
+## T-6. PowerShell에서 `-PappVersionName=0.1.0-dev.3+abc`를 넘기면 versionCode 0
+- 발생: 2026-10-16 로컬 빌드
+- 증상: `android.defaultConfig.versionCode is set to 0`.
+- 원인: PowerShell이 `+`가 포함된 인수를 분리해 Gradle에 빈/깨진 값이 전달됨.
+- 해결: `--% -PappVersionName="0.1.0-dev.3+abc1234"`(stop-parsing 토큰)로 그대로 전달. CI(bash)는 영향 없음.
+- 재발 방지: `app/build.gradle.kts`가 계산된 버전을 `[PocketRisuApp] version … (code …)`로 항상 출력.
+
 ## T-2. 서버 주소가 http:// 이면 접속 거부
 - 발생: 설계상 의도된 동작
 - 증상: 설정 화면에서 "HTTPS 주소만 허용" 오류

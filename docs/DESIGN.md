@@ -217,7 +217,7 @@ PocketRisu_app/
 2. InterceptLayer **tee + 계측**(`/api/read`, `/api/chat-content`, `/api/asset`: 첫바이트·총 시간·바이트·WebView HTTP 캐시 히트 여부) → `MEASUREMENTS.md` 0차 실측(S7+/S26: 홈 로드, 채팅 열기, 삽화 표시). **측정 없이는 다음 캐시를 만들지 않는다.**
 3. AssetCache(stale-while-revalidate, Range, compress 무효화) + RisuSave ver7 디코더 + Prefetcher(트리거 A·B) → 1차 실측
 4. GenWatcher(model-jobs + `/proxy2`, 포그라운드 알림) + 분할화면 검증
-5. Updater(GitHub Releases, SHA-256·서명 검증, PackageInstaller)
+5. Updater(GitHub Releases, SHA-256·서명 검증, PackageInstaller) — **구현됨 2026-10-16 (실기기 설치 흐름 검증 대기)**, 설정 화면 포함
 6. Exporter(단일 HTML, 리사이즈·미리보기·예상 용량)
 7. AppLock, TOFU 핀
 8. (측정이 정당화할 때만) DbBlobCache

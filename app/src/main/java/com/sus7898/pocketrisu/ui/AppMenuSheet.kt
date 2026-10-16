@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.sus7898.pocketrisu.BuildConfig
+import com.sus7898.pocketrisu.R
 import com.sus7898.pocketrisu.databinding.SheetAppMenuBinding
 
 /** Native app menu (bottom sheet) opened from the edge handle in MainActivity. */
@@ -16,12 +17,14 @@ object AppMenuSheet {
             dialog.dismiss()
             context.startActivity(Intent(context, DiagnosticsActivity::class.java))
         }
-        b.menuServer.setOnClickListener {
+        b.menuSettings.setOnClickListener {
             dialog.dismiss()
-            context.startActivity(Intent(context, SetupActivity::class.java))
+            context.startActivity(Intent(context, SettingsActivity::class.java))
         }
-        b.menuAbout.text = "PocketRisu App ${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE}) · " +
-            "verified with server ${BuildConfig.VERIFIED_SERVER_VERSIONS}"
+        b.menuAbout.text = context.getString(
+            R.string.settings_app_info,
+            BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.BUILD_TYPE, BuildConfig.VERIFIED_SERVER_VERSIONS,
+        )
         dialog.setContentView(b.root)
         dialog.show()
     }

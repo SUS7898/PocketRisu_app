@@ -23,6 +23,15 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_LAST_SERVER_INFO, null)
         set(value) = prefs.edit { putString(KEY_LAST_SERVER_INFO, value) }
 
+    /** false = stable releases only (default); true = follow the rolling nightly pre-release. */
+    var nightlyChannel: Boolean
+        get() = prefs.getBoolean(KEY_NIGHTLY, false)
+        set(value) = prefs.edit { putBoolean(KEY_NIGHTLY, value) }
+
+    var lastUpdateCheckMs: Long
+        get() = prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L)
+        set(value) = prefs.edit { putLong(KEY_LAST_UPDATE_CHECK, value) }
+
     fun serverHttpUrl(): HttpUrl? = serverUrl?.toHttpUrlOrNull()
 
     fun serverHost(): String? = serverHttpUrl()?.host
@@ -31,6 +40,8 @@ class AppSettings(context: Context) {
         private const val KEY_SERVER_URL = "serverUrl"
         private const val KEY_INCLUDE_HOST = "includeHostInExport"
         private const val KEY_LAST_SERVER_INFO = "lastServerInfo"
+        private const val KEY_NIGHTLY = "nightlyChannel"
+        private const val KEY_LAST_UPDATE_CHECK = "lastUpdateCheckMs"
 
         /** Validates user input; returns the normalised base URL or null. */
         fun normalizeServerUrl(raw: String, allowHttp: Boolean): String? {

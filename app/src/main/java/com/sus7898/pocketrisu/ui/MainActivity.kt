@@ -23,12 +23,15 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewCompat
 import com.sus7898.pocketrisu.R
 import com.sus7898.pocketrisu.databinding.ActivityMainBinding
 import com.sus7898.pocketrisu.log.AppLog
 import com.sus7898.pocketrisu.net.Http
 import com.sus7898.pocketrisu.settings.AppSettings
+import com.sus7898.pocketrisu.update.UpdateChecker
+import kotlinx.coroutines.launch
 
 /**
  * WebView shell (docs/DESIGN.md §3.1). Milestone 1: the server UI is loaded as-is; the
@@ -82,6 +85,22 @@ class MainActivity : AppCompatActivity() {
 
         createWebView(base, savedInstanceState)
         AppLog.i(TAG, "mode=server-ui")
+        checkForUpdateDaily()
+    }
+
+    /** At most once a day: tell the user an update exists; installing stays a manual step in Settings. */
+    private fun checkForUpdateDaily() {
+        val now = System.currentTimeMillis()
+        if (now - settings.lastUpdateCheckMs < 24 * 60 * 60 * 1000L) return
+        lifecycleScope.launch {
+            val channel = if (settings.nightlyChannel) UpdateChecker.Channel.NIGHTLY else UpdateChecker.Channel.STABLE
+            UpdateChecker.fetchLatest(channel).onSuccess { rel ->
+                settings.lastUpdateCheckMs = now
+                if (rel.isNewer) {
+                    Toast.makeText(this@MainActivity, getString(R.string.update_available_toast, rel.versionName), Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     override fun onResume() {

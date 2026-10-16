@@ -43,6 +43,22 @@
 - `ci.yml`에 `nightly` 잡 추가: main push → `git describe` 버전 → 서명 릴리스 APK → `nightly` 프리릴리스 갱신(`make_latest:false`).
 - versionCode 공식 변경: `X*1_000_000 + Y*10_000 + Z*100 + dev(0~99)` (`release.yml`도 동일). 기존 설치(0.1.0, code 1000) 위에 새 체계(code 10000+)가 올라감.
 
+### push · Secrets · 첫 CI
+- `main` push, `set-secrets.sh`로 Secrets 4개 등록(04:49Z), `v0.1.0` 태그 push(1차 408 네트워크 오류 → 재시도 성공).
+- 첫 CI·Release 모두 `./gradlew: Permission denied` 실패 → T-5(실행 비트) 수정. 태그는 새 커밋으로 이동.
+
+### 설정 화면 + 자체 업데이트 (DESIGN §3.6 = M5 선행)
+- `SettingsActivity`: 서버 변경, nightly 채널 토글, 업데이트 확인 → 다운로드 → SHA-256(`SHA256SUMS.txt`) → 서명 인증서 동일성 → `PackageInstaller`. "알 수 없는 앱 설치" 미허용이면 시스템 설정으로 안내.
+- `MainActivity`: 하루 1회 자동 확인 → 토스트만(설치는 수동).
+- `VersionCode.kt`는 Gradle 공식의 거울; `VersionCodeTest`로 nightly↔정식 순서 보장 검증.
+
+### 검증 (2차)
+| 명령 | 결과 |
+|---|---|
+| `.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleRelease` | BUILD SUCCESSFUL (테스트 13건, Lint 오류 0) |
+| `--% -PappVersionName="0.1.0-dev.3+abc1234"` | `versionCode=10003`, `versionName=0.1.0-dev.3+abc1234` (aapt2 badging) |
+
 ### 미검증 / 다음
+- 실기기에서 설정 → 업데이트 확인 → 설치까지의 흐름(특히 `USER_ACTION_NOT_REQUIRED`가 One UI에서 적용되는지) — nightly 2개가 쌓이면 테스트 가능.
 - S7+ 설치·로그 — 사용자 확인 필요.
 - 마일스톤 2: InterceptLayer tee + 계측 → `MEASUREMENTS.md` 0차 실측.
