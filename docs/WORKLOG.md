@@ -141,7 +141,15 @@
 ### 실기기 11차 (Tab S7+, dev.9) — 삽화 오류 뒤 새로고침
 - 20:58:28 `[Lightboard] sideEffect 출력 처리 실패 … 응답이 비어있습니다. 검열?`(모듈 오류, 앱 무관) → 20:59:18 `KeepAlive started` → `state restored` → 재부트스트랩. `App start` 없음 = T-15 재발(dev.9에는 수정 미포함). 원인 필드를 잡기 위해 `onConfigurationChanged` diff 로깅 + "activity recreated" 로그 추가.
 
+### 실기기 12차 (Tab S7+, dev.12, 21:12 → 익일 04:41, 279KB)
+- **T-15 원인 확정**: `configuration changed in place: keyboard,keyboardHidden,navigation` 9회 = 키보드 커버 탈착. 모두 제자리 처리, 재생성 0회, `App start` 0회(설치 시 제외). 해결.
+- `/api/db/flush` 0건, 채팅 열기 재시도 0건 유지.
+- **삽화는 여전히 직렬**(장당 4~11초, 12장 64~93초): Lightboard `concurrent`는 모듈(manifest) 간 동시성이고, xnai는 `xnai.onOutput.lua`에서 슬롯을 `for … pcall(gen.generate)`로 **순차 호출**한다. 따라서 설정값으로는 안 풀리고 xnai 모듈 Lua 수정(모듈 제작자) 또는 PocketRisu `generateImage` 지연-인레이 패치가 필요. 후자는 파서의 미존재 인레이 처리 확인이 선행돼야 해 보류.
+- 메인 모델 job 400 → CORS → proxy 실패 → 재시도 체인으로 턴당 1~3분 허비(T-18). 앱 밖.
+- 클립보드 복사 거부(T-17) → `ClipboardBridge`.
+
 ### 미검증 / 다음
+- T-17: 복사 동작 확인. T-18: PocketRisu 요청 로그에서 400 본문 확인 → 제보.
 - Lightboard `concurrent` 2~3 설정 후 12장 소요 비교(68초 기준).
 - 삽화 병렬화 패치(040) — Lightboard 설정으로 대체, 보류: NAI 동시 2~3장, 429 시 직렬 복귀.
 - T-15: 태블릿에서 키보드 커버 탈착·회전·분할 화면 뒤 `WebView re-attached` 로그와 함께 페이지가 유지되는지.

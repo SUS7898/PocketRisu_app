@@ -381,6 +381,7 @@ class MainActivity : AppCompatActivity() {
         wv.webViewClient = ShellWebViewClient(this, base)
         wv.webChromeClient = ShellWebChromeClient(this)
         DownloadBridge.install(wv, base)
+        ClipboardBridge.install(wv, base)
         wv.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
             if (url.startsWith("blob:")) {
                 DownloadBridge.requestBlob(wv, url, mimeType)

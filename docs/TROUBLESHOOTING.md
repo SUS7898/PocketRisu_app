@@ -165,6 +165,28 @@
 - 해결: `DownloadBridge` — `WebMessageListener` 포트 `PocketRisuAppDownload`를 서버 origin에만 노출. ① 번들 모드: 패치 030이 `downloadFile`에서 `{name, mime, data(base64)}`를 포트로 직접 보내 **원래 파일명**으로 저장. ② 서버 UI 모드: DownloadListener가 blob을 페이지 안에서 `fetch`해 같은 포트로 보냄(파일명은 시각 기반, 확장자는 MIME 추정). 저장 위치 `Downloads/PocketRisu/` (MediaStore, 권한 불필요). 로그 `I/Download saved …`.
 - 한계: base64 문자열 하나로 넘기므로 수백 MB 내보내기는 느리고 메모리를 많이 쓴다. 채팅 내보내기 기능(M6)은 네이티브에서 직접 만들 예정이라 이 경로를 타지 않는다.
 
+## T-17. 복사 버튼이 동작하지 않음 (`NotAllowedError: Failed to execute 'writeText' on 'Clipboard': Write permission denied`)
+- 발생: 2026-10-16 22:09, Tab S7+, dev.12 번들 모드.
+- 원인: Android WebView는 `navigator.clipboard.writeText`에 권한을 주지 않는다(Chrome과 다름). PocketRisu의 복사 기능이 모두 이 API를 쓴다.
+- 해결: `ClipboardBridge` — 문서 시작 스크립트로 `navigator.clipboard.writeText`를 `PocketRisuAppClipboard` 포트 호출로 바꿔치기 → 네이티브 `ClipboardManager`. 서버 origin에만 주입. 텍스트는 로그에 남기지 않음(길이만).
+- 한계: `readText`(붙여넣기 API)는 미구현. 필요해지면 응답 포트를 추가.
+
+## T-18. 메인 모델(Vertex AI Gemini 3.1 Pro) 요청이 서버 job에서 400으로 거부된 뒤 CORS 오류·프록시 실패를 거쳐 재시도됨
+- 발생: 2026-10-17 04:25~04:37, Tab S7+, dev.12. 매 턴 반복.
+- 증상(로그):
+  ```
+  04:25:24.907 POST model-jobs                                   ← job 생성 요청
+  04:26:18.806 console[warning]: [ModelJob] job creation rejected ( 400 ), falling back to direct request path   ← 54초 뒤 400
+  04:26:19.122 console[error]: Access to fetch at 'https://aiplatform.googleapis.com/…/gemini-3.1-pro-preview:generateContent' … blocked by CORS
+  04:26:19.126 POST /proxy2  →  04:26:20.614 console[error]: [ModelPreset] request failed
+  04:26:20.640 POST model-jobs → stream → 04:26:27 claim → [ModelPreset] request failed 재발
+  04:26:27.910 POST model-jobs → … (이후 성공)
+  ```
+  두 번째 턴은 job 생성에 **167초**(04:33:44 → 04:36:31) 걸린 뒤 400.
+- 원인(추정): ① 서버 `createJob`의 400 사유는 `chatId 없음 / target URL 비정상 / method≠POST / body가 문자열 아님` 네 가지뿐인데, Vertex AI(`aiplatform.googleapis.com`) 어댑터 요청이 이 중 하나에 걸리는 것으로 보임(어댑터가 본문을 객체로 보내거나 URL 형식). ② 400이 즉시가 아니라 54~167초 뒤에 오는 것은 서버 단일 스레드가 그 시간 동안 막혀 있었다는 뜻(T-7과 같은 뿌리). ③ 거부 후 클라이언트는 브라우저 직접 요청(Vertex는 CORS 불허 → 실패) → `/proxy2`(서비스계정 토큰 문제로 실패 추정) → 다시 job… 순으로 돌아 결국 성공하지만 **턴당 1~3분을 허비**.
+- 앱에서 할 수 있는 것: 없음(PocketRisu 어댑터·서버 로직). 확인 방법: PocketRisu 설정 → 요청 로그에서 400 본문(`error` 문자열)을 보면 사유가 바로 나온다. 그 문자열과 이 타임라인으로 PocketRisu에 제보할 것. 임시 우회: 메인 모델을 Vertex 대신 Gemini API(generativelanguage) 경로로 두면 job 경로가 정상 동작할 가능성이 큼(이전 세션에서 `model-jobs` 스트림이 정상이던 모델이 그 경로였는지 확인 필요).
+- 보조 모델(3.8 Flash)도 같은 400 → 직접 경로로 간다(실기기 10차). 즉 **현재 생성 요청 대부분이 서버 job을 타지 못하고** 브라우저 직접 경로로 처리되고 있어, 앱이 백그라운드로 가면 끊긴다 — keep-alive가 필수인 이유.
+
 ## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패
 - 발생: 2026-10-16 14:58, S26 Ultra(One UI, Android 17), dev.2 → dev.4 첫 시도. 두 번째 시도는 성공.
 - 원인: `SessionParams.setRequireUserAction(USER_ACTION_NOT_REQUIRED)`를 요청하면 One UI가 "알 수 없는 출처" 패키지의 자체 업데이트를 세션 단계에서 거부함(사용자 확인 창이 뜬 뒤 0.8초 만에 ABORTED).
