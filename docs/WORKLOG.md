@@ -152,8 +152,16 @@
 - 메인 모델 job 400의 정체는 Vertex가 아니라 **빈 `risu-auth`**. `authFetch`가 인증 오류 후 `cachedJwt`를 비우면, `createAuth()`를 직접 쓰는 job/proxy/Vertex 토큰 호출이 `''`를 받아 실패. 서버 정지(54~167초) 뒤 처리되며 JWT(5분)가 만료된 것이 방아쇠.
 - 패치 040: 갱신 여유 30초→2분, 토큰 없으면 `/api/test_auth`(세션 쿠키)로 즉시 재발급. 번들 패치 4개.
 
+### 실기기 13차 (Tab S7+, dev.14, 05:15 → 09:35)
+- 패치 040 작동: 400 1회 → `JWT re-issued` 즉시 → proxy 성공, `[ModelPreset] request failed` 0건.
+- 남은 것: 서버 정지 162초(05:44:42 job POST → 05:47:24 응답). 서버 소스상 5분 간격 백업(`BACKUP_INTERVAL_MS`) 복사와 시각·길이가 일치 → T-18에 사용자 조치(env로 간격 확대) 기록. 여유 2분→4분(dev.15).
+- 삽화 12장: **48초 / 41초**(이전 64~93초; NAI 응답 자체가 빨라진 시간대). 여전히 직렬.
+- 서버 연결 실패로 캐시 버전 번들 시작 → healthy (T-9 경로 정상). 키보드 구성 변경 6회 제자리 처리. `renderer gone` 0, flush 0.
+- Lightboard "응답이 비어있습니다. 검열?" 1회(Gemini 빈 응답, 앱 무관). 복사(T-17)는 아직 사용 흔적 없음.
+
 ### 미검증 / 다음
-- dev.14: `[ModelJob] job creation rejected ( 400 )` 소멸 여부, `[Storage] JWT re-issued from the session cookie` 출현 여부.
+- 서버 env `POCKETRISU_BACKUP_INTERVAL_MS` 확대 후 정지 재발 여부.
+- dev.15: 4분 여유로 정지 중 400 소멸 여부, `[Storage] JWT re-issued from the session cookie` 출현 여부.
 - T-17: 복사 동작 확인. T-18: PocketRisu 요청 로그에서 400 본문 확인 → 제보.
 - Lightboard `concurrent` 2~3 설정 후 12장 소요 비교(68초 기준).
 - 삽화 병렬화 패치(040) — Lightboard 설정으로 대체, 보류: NAI 동시 2~3장, 429 시 직렬 복귀.

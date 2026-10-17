@@ -191,6 +191,9 @@
   4. 54~167초 지연은 서버 단일 스레드 정지(채팅 저장 → 5초 뒤 100MB DB 재조립·인코딩) 뒤에 요청이 처리되면서 그 사이 JWT(5분)가 만료된 것. T-7과 같은 뿌리.
 - 조치: `patches/040-auth-token-recovery.patch` (번들 모드) — ① 토큰 갱신 여유를 30초→**2분**으로(서버가 1분 넘게 붙들어도 처리 시점에 살아 있도록) ② 토큰이 없으면 `''`를 돌려주는 대신 **세션 쿠키로 `/api/test_auth`에서 즉시 재발급**. 서버 UI 모드에는 적용 불가. 확인: 로그에 `[ModelJob] job creation rejected ( 400 )`가 사라지고, 있더라도 `[Storage] JWT re-issued from the session cookie` 뒤에 바로 성공해야 함.
 - upstream 제보 후보: `_doRefreshToken`이 빈 헤더를 돌려주는 문제 + `createAuth()` 직접 호출자가 `checkAuth()`를 거치지 않는 문제.
+- **dev.14 검증 (05:44~05:48)**: 400이 1회 남았지만 바로 `[Storage] JWT re-issued from the session cookie` → `/proxy2` 성공 → `[ModelPreset] request failed` **0건**(이전 세션 3건). 연쇄 실패는 사라졌고 **서버 정지(162초) 자체**만 남았다. 여유를 4분으로 올려(dev.15) 정지 중에도 토큰이 만료되지 않게 함.
+- **정지의 정체 (서버 소스)**: 메시지 전송 → `chat-content save` + `patch` → 5초 뒤 `persistDbCacheWithChats`(전체 DB 재조립·인코딩·SQLite 쓰기) → **직전 백업으로부터 `BACKUP_INTERVAL_MS`(기본 5분)가 지났으면 `createBackupAndRotate()`로 DB blob 전체를 SQLite 안에서 복사**. 두 정지(04:33:44→04:36:31, 05:44:42→05:47:24)가 모두 "메시지 전송 ~10초 뒤, 직전 정지로부터 1시간+"에 일어났고 160초대로 같다 = 백업 복사 시간. 즉 **5분에 한 번꼴로 메시지를 보낼 때마다 2~3분 정지**가 생길 수 있다.
+- **사용자 조치(서버)**: docker-compose의 `environment:`에 `POCKETRISU_BACKUP_INTERVAL_MS=21600000`(6시간) 또는 `86400000`(24시간)을 넣고 `docker compose up -d`. 백업은 PocketRisu 설정의 스냅샷 한도 안에서 그대로 유지되며, 정지 빈도만 시간당 수 회 → 하루 1~4회로 준다. 근본은 DB 축소(캐릭터 비활성화).
 - 보조 모델(3.8 Flash)도 같은 400 → 직접 경로로 간다(실기기 10차). 즉 **현재 생성 요청 대부분이 서버 job을 타지 못하고** 브라우저 직접 경로로 처리되고 있어, 앱이 백그라운드로 가면 끊긴다 — keep-alive가 필수인 이유.
 
 ## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패
