@@ -159,7 +159,17 @@
 - 서버 연결 실패로 캐시 버전 번들 시작 → healthy (T-9 경로 정상). 키보드 구성 변경 6회 제자리 처리. `renderer gone` 0, flush 0.
 - Lightboard "응답이 비어있습니다. 검열?" 1회(Gemini 빈 응답, 앱 무관). 복사(T-17)는 아직 사용 흔적 없음.
 
+### upstream v1.15.0 + 번들 패치 050·060 (2026-10-20)
+- 서버를 v1.15.0으로 올린 뒤 로그: 409 `modelJobBusy`·토큰 5xx HTML 0건(v1.12.0 #87 + DSM 프록시 read timeout 600초). `[Storage] No response headers within 120000ms` 10/16 220건·10/18 397건은 각각 **한 초에 216건·387건** 몰린 버스트 — T-14(캐시 앱 동결 복귀 아티팩트) 패턴이지 서버 정지가 아님. 10/19 0건은 keep-alive 효과. (처음엔 v1.15.0 #102 에셋 스윕과 연결했으나 버스트 분포로 철회.)
+- 앱은 `mode=server-ui (version mismatch: server 1.15.0, bundle 1.14.0)` 폴백 → `upstream.lock` v1.15.0, `VERIFIED_SERVER_VERSIONS`에 1.15.0 추가.
+- **패치 050** `ChatBody.svelte`·`parser.svelte.ts`: 삽화 생성 직후 이미지가 빈 채로 남고 채팅을 나갔다 와야 보이던 문제. `await tick()` 뒤 플레이스홀더 조회가 0개면 `requestAnimationFrame`에서 재시도(`{:then}` 교체와 effect의 `.then()`이 별개 마이크로태스크). 같은 함수의 IntersectionObserver가 저장소 8곳 중 유일하게 `disconnect()`가 없어 함께 정리. upstream 단위 테스트 8/8.
+- **패치 060** `request.ts`: `ModelPresetAdapterError.retryable === false`(auth/404/invalid-request/차단)에 `noRetry` — 지금까지 로그에서만 읽혀 같은 요청이 2회 더 나갔음. 비스트리밍 빈 텍스트 + 비정상 `finishReason`(SAFETY/MAX_TOKENS/RECITATION/…)은 사유를 담은 실패로 반환 → Lightboard "응답이 비어있습니다. 검열?" 추측 대신 이유가 보임. upstream `pnpm check` 0 errors, request 경로 테스트 174/174.
+- 두 패치 모두 v1.14.0·v1.15.0 태그에 `--3way` 없이 깨끗이 적용됨.
+- 서버 쪽(`server.cjs` 토큰·hub-proxy 타임아웃)은 번들 범위 밖 — 로컬 PocketRisu 클론 브랜치 `fix/bounded-fetches-and-empty-responses`에 보관, 컨테이너를 직접 빌드할 때만 적용.
+
 ### 미검증 / 다음
+- 패치 050: 실기기에서 삽화 생성 직후 스크롤·채팅 이동 없이 이미지가 뜨는지. 로그엔 안 남으니 육안 확인.
+- 패치 060: Lightboard 빈 응답 재발 시 `Model returned no text (finishReason: …)` 문구가 뜨는지 → SAFETY면 프롬프트, MAX_TOKENS면 maxOutputTokens/thinking 조정.
 - 서버 env `POCKETRISU_BACKUP_INTERVAL_MS` 확대 후 정지 재발 여부.
 - dev.15: 4분 여유로 정지 중 400 소멸 여부, `[Storage] JWT re-issued from the session cookie` 출현 여부.
 - T-17: 복사 동작 확인. T-18: PocketRisu 요청 로그에서 400 본문 확인 → 제보.

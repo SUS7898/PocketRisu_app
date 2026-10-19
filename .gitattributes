@@ -1,0 +1,3 @@
+# Patch files are fed to git apply verbatim; a CRLF checkout (Windows core.autocrlf=true)
+# makes every hunk fail against the LF upstream tree (see patches/README.md).
+*.patch -text

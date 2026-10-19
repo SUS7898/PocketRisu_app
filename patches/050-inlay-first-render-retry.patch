@@ -1,0 +1,69 @@
+diff --git a/src/lib/ChatScreens/ChatBody.svelte b/src/lib/ChatScreens/ChatBody.svelte
+index 9b15f408..d4730569 100644
+--- a/src/lib/ChatScreens/ChatBody.svelte
++++ b/src/lib/ChatScreens/ChatBody.svelte
+@@ -431,7 +431,16 @@
+         markParsingResult.then(async () => {
+             await checkImg()
+             await tick() // Wait for Svelte to re-render the {:then} block into DOM
+-            if (bodyRoot) resolveInlayPlaceholders(bodyRoot)
++            if (!bodyRoot) return
++            if (resolveInlayPlaceholders(bodyRoot) > 0) return
++            // The {:then} block can land a frame after tick() resolves (its
++            // own .then on the same promise is a separate microtask). A
++            // placeholder rendered then would never be observed, so look once
++            // more on the next frame — a freshly generated inlay otherwise
++            // stays blank until something else re-renders the message.
++            requestAnimationFrame(() => {
++                if (bodyRoot) resolveInlayPlaceholders(bodyRoot)
++            })
+         })
+     })
+ </script>
+diff --git a/src/ts/parser/parser.svelte.ts b/src/ts/parser/parser.svelte.ts
+index 72e6195a..ac91cdb5 100644
+--- a/src/ts/parser/parser.svelte.ts
++++ b/src/ts/parser/parser.svelte.ts
+@@ -969,8 +969,10 @@ async function processInlayQueue() {
+     isResolvingPlaceholders = false
+ }
+ 
+-export function resolveInlayPlaceholders(root: HTMLElement) {
+-    if (!root) return
++// Returns how many placeholders were put under observation, so a caller that
++// may have run before the DOM it was waiting on landed can tell and retry.
++export function resolveInlayPlaceholders(root: HTMLElement): number {
++    if (!root) return 0
+     // Images rendered from a cache entry whose dimensions are still loading.
+     for (const img of Array.from(root.querySelectorAll<HTMLImageElement>('img[data-inlay-pending]'))) {
+         const id = img.getAttribute('data-inlay-pending')
+@@ -978,8 +980,12 @@ export function resolveInlayPlaceholders(root: HTMLElement) {
+         if (id) sizeInlayImage(img, id)
+     }
+     const placeholders = Array.from(root.querySelectorAll('[data-inlay-id]')) as HTMLElement[]
+-    if (placeholders.length === 0) return
++    if (placeholders.length === 0) return 0
+ 
++    // Every other IntersectionObserver in the app disconnects itself; this one
++    // is created per message render, so without that it kept its targets
++    // (detached by the next re-render) alive for the life of the page.
++    let remaining = placeholders.length
+     const observer = new IntersectionObserver((entries) => {
+         entries.forEach(entry => {
+             if (entry.isIntersecting) {
+@@ -989,6 +995,7 @@ export function resolveInlayPlaceholders(root: HTMLElement) {
+                 if (id) {
+                     resolveQueue.push({ el, id, type: type || 'inlay' })
+                     observer.unobserve(el)
++                    if (--remaining === 0) observer.disconnect()
+                     processInlayQueue()
+                 }
+             }
+@@ -996,6 +1003,7 @@ export function resolveInlayPlaceholders(root: HTMLElement) {
+     }, { rootMargin: '200px' }) // Start loading a bit before they scroll into view
+ 
+     placeholders.forEach(el => observer.observe(el))
++    return placeholders.length
+ }
+ 
+ export interface simpleCharacterArgument{

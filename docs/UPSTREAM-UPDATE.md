@@ -38,6 +38,8 @@ gh api "repos/PocketRisu/PocketRisu/compare/v1.14.0...v1.15.0" \
 | C6b | 패치 020 (앱 안에서 강제 flush 생략) | `flushImmediate()` 안의 `void flushServerDbKeepalive()` 호출, 전역 `__POCKETRISU_APP_BUNDLE__`(BundleServer가 index.html에 주입) | `src/ts/globalApi.svelte.ts` ~800 | 함수가 옮겨지면 패치 재생성; upstream이 flush를 비차단으로 바꾸면 패치 삭제 검토 |
 | C6c | 패치 030 (앱 다운로드 브리지) | `downloadFile(name, dat)` 시그니처, 포트 이름 `PocketRisuAppDownload` | `src/ts/globalApi.svelte.ts` ~215 | 함수가 바뀌면 패치 재생성; DownloadBridge의 페이로드 형식과 맞출 것 |
 | C6d | 패치 040 (JWT 재발급·조기 갱신) | `createAuth()`의 30초 여유, `_doRefreshToken()` 본문, `/api/test_auth`가 쿠키로 `{status:'success', token}`을 돌려주는 동작 | `src/ts/storage/nodeStorage.ts` ~231·~280, `server.cjs /api/test_auth` | upstream이 `createAuth` 직접 호출자를 `checkAuth` 경유로 바꾸거나 빈 헤더 반환을 고치면 패치 삭제 |
+| C6e | 패치 050 (새 인레이 첫 렌더 재시도·observer 정리) | `ChatBody.svelte`의 `await tick()` 뒤 `resolveInlayPlaceholders(bodyRoot)` 호출, `parser.svelte.ts`의 `resolveInlayPlaceholders` 본문(IntersectionObserver 생성부) | `src/lib/ChatScreens/ChatBody.svelte` ~433, `src/ts/parser/parser.svelte.ts` ~972 | 호출부가 옮겨지면 패치 재생성; upstream이 플레이스홀더 재조회나 `disconnect()`를 넣으면 패치 삭제 |
+| C6f | 패치 060 (재시도 불가 어댑터 에러 `noRetry`, 빈 응답 `finishReason` 표시) | `requestModelPreset` catch의 `noRetry:` 식, 비스트리밍 `return { type: 'success', … response.text }` 직전, `ModelPresetAdapterError.retryable` | `src/ts/process/request/request.ts` ~1018·~1038 | upstream이 `retryable`을 재시도 루프에서 읽거나 빈 응답을 실패로 돌리면 패치 삭제. 스트리밍 경로는 패치에 없음 |
 | C7 | 읽기 전용 디코더 | `RISUSAVE` 매직 11B, 버전 7(msgpack)·8(zlib)·9(gzip), msgpackr `useRecords:false`, `int64AsType:'number'` | `risuSave.ts` 상단 | 디코더 버전 분기 추가. **새 버전 바이트가 나오면 디코더는 자동 비활성(폴백)** |
 | C8 | 채팅 쓰기 후 캐시 무효화 | 쓰기 경로 = `POST /api/chat-content/:chaId/:idx`, `POST /api/patch`, `POST /api/write` | `server.cjs` 해당 라우트 | 무효화 트리거 경로 목록 갱신 |
 | C9 | 삽화 생성 직후 프리페치 | 삽화 업로드 경로와 키 형식 (`/api/write` + `file-path`=hex(`inlay/...`)) | `stableDiff.ts`, `globalApi.svelte.ts` 업로드부 | 트리거 B 경로 수정 |
@@ -82,3 +84,4 @@ PocketRisu 릴리스 공지
 | 서버 버전 | 앱 버전 | 계약 변경 | 조치 | 확인일 |
 |---|---|---|---|---|
 | 1.14.0 | 0.1.0 (M1) | — (기준) | — | 2026-10-16 |
+| 1.15.0 | 0.1.0-dev.15 → 다음 nightly | 계약 파일 중 `server.cjs`·`parser.svelte.ts` 변경 있음(#102 에셋 스윕·프리셋 복구). C1~C14 대조 결과 앱이 쓰는 경로·헤더·전역 변경 없음. 패치 010~040 `--3way` 적용 확인 | `upstream.lock` v1.15.0, `VERIFIED_SERVER_VERSIONS` 추가, 패치 050·060 추가(C6e·C6f) | 2026-10-20 |
