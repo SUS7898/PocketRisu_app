@@ -1,0 +1,60 @@
+diff --git a/src/ts/process/request/request.ts b/src/ts/process/request/request.ts
+index 3a16bd22..b62b02c4 100644
+--- a/src/ts/process/request/request.ts
++++ b/src/ts/process/request/request.ts
+@@ -26,6 +26,7 @@ import {
+     sendAnthropicChatRequest, streamAnthropicChatRequest, previewAnthropicChatRequest,
+     sendGoogleChatRequest, streamGoogleChatRequest, previewGoogleChatRequest,
+     runToolLoop,
++    ModelPresetAdapterError,
+     type AdapterCacheContext,
+     type AdapterChatMessage, type AdapterChatOptions, type AdapterChatResponse,
+     type AdapterChatStreamDelta, type AdapterCredential,
+@@ -663,6 +664,11 @@ function resolvePresetStreaming(preset: ModelPreset, arg: RequestDataArgumentExt
+ // follow-up re-run already-executed (possibly write-side) tools.
+ const MODEL_PRESET_MAX_TOOL_STEPS = 8
+ 
++// Finish reasons that mean "the model stopped on its own" across the adapters
++// (Gemini / OpenAI-compatible / Anthropic). Anything else paired with an empty
++// text is surfaced as a failure, see the non-streaming return below.
++const NORMAL_FINISH_REASONS = new Set(['STOP', 'stop', 'end_turn', 'FINISH_REASON_UNSPECIFIED'])
++
+ // How often (ms) a streaming response flushes accumulated text to the chat
+ // renderer. Adapters yield one delta per token; each emitted chunk forces a full
+ // re-parse of the whole message (markdown + sanitize) downstream, so emitting
+@@ -1015,6 +1021,21 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
+                 })
+             })
+         }
++        // An empty text with an abnormal finish reason (SAFETY, MAX_TOKENS,
++        // RECITATION, content_filter, length…) is a failure the provider
++        // already explained; returning it as a blank success hides the reason
++        // and leaves callers guessing ("censored?"). Normal stops with no text
++        // (and anything without a reason) keep the previous blank-success path
++        // so fallbackWhenBlankResponse still applies.
++        if (response.text.trim() === '' && response.finishReason
++            && !NORMAL_FINISH_REASONS.has(response.finishReason)) {
++            return {
++                type: 'fail',
++                result: `Model returned no text (finishReason: ${response.finishReason})`,
++                model: wireModel,
++                modelLabel: preset.name,
++            }
++        }
+         return { type: 'success', result: formatPresetReasoning(response.reasoning) + response.text, model: wireModel, modelLabel: preset.name }
+     } catch (err) {
+         console.error('[ModelPreset] request failed', describeModelPresetError(err))
+@@ -1034,8 +1055,11 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
+             // The server-side job is still running (or another one holds the
+             // chat): a re-send would only hit the per-chat guard again, so
+             // spending the retry budget here just replaces the real failure
+-            // text with "busy" (issue #87).
+-            noRetry: err instanceof ModelJobBusyError || err instanceof ModelJobConnectionLostError,
++            // text with "busy" (issue #87). Adapter errors that declare
++            // themselves non-retryable (auth, not-found, invalid-request,
++            // blocked prompt) would just re-send the identical request.
++            noRetry: err instanceof ModelJobBusyError || err instanceof ModelJobConnectionLostError
++                || (err instanceof ModelPresetAdapterError && !err.retryable),
+         }
+     }
+ }
