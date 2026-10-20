@@ -196,6 +196,11 @@
 - **사용자 조치(서버)**: docker-compose의 `environment:`에 `POCKETRISU_BACKUP_INTERVAL_MS=21600000`(6시간) 또는 `86400000`(24시간)을 넣고 `docker compose up -d`. 백업은 PocketRisu 설정의 스냅샷 한도 안에서 그대로 유지되며, 정지 빈도만 시간당 수 회 → 하루 1~4회로 준다. 근본은 DB 축소(캐릭터 비활성화).
 - 보조 모델(3.8 Flash)도 같은 400 → 직접 경로로 간다(실기기 10차). 즉 **현재 생성 요청 대부분이 서버 job을 타지 못하고** 브라우저 직접 경로로 처리되고 있어, 앱이 백그라운드로 가면 끊긴다 — keep-alive가 필수인 이유.
 
+## T-19. 로컬 `scripts/build-frontend.sh`가 `patch failed: … (rebase needed)`로 멈추는데 upstream 쪽 파일은 바뀌지 않음
+- 발생: 2026-10-20, Windows, v1.15.0으로 lock을 올린 직후. `010-chat-first-byte-timeout-120s.patch`가 `nodeStorage.ts:16`에서 실패했지만 v1.14.0→v1.15.0 diff에 그 파일 변경이 없음.
+- 원인: Git for Windows 시스템 설정 `core.autocrlf=true`. `patches/*.patch`가 체크아웃 때 CRLF로 변환돼(`git ls-files --eol` → `w/crlf`) LF인 upstream 트리에 한 줄도 맞지 않았다. CR을 지우면 전부 적용됨(`tr -d '\r' < p | git apply --check`). CI(ubuntu)는 변환이 없어 통과하므로 로컬에서만 재현된다.
+- 해결: `.gitattributes`에 `*.patch -text`. 이미 체크아웃된 저장소는 `rm patches/*.patch && git checkout -- patches/`로 다시 받아야 적용된다(`git checkout --`만으로는 "변경 없음"으로 보고 건드리지 않음). 판별법: 실패한 패치의 대상 파일이 upstream diff에 없으면 리베이스가 아니라 줄바꿈을 먼저 의심.
+
 ## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패
 - 발생: 2026-10-16 14:58, S26 Ultra(One UI, Android 17), dev.2 → dev.4 첫 시도. 두 번째 시도는 성공.
 - 원인: `SessionParams.setRequireUserAction(USER_ACTION_NOT_REQUIRED)`를 요청하면 One UI가 "알 수 없는 출처" 패키지의 자체 업데이트를 세션 단계에서 거부함(사용자 확인 창이 뜬 뒤 0.8초 만에 ABORTED).
