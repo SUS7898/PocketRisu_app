@@ -166,6 +166,7 @@
 - **패치 060** `request.ts`: `ModelPresetAdapterError.retryable === false`(auth/404/invalid-request/차단)에 `noRetry` — 지금까지 로그에서만 읽혀 같은 요청이 2회 더 나갔음. 비스트리밍 빈 텍스트 + 비정상 `finishReason`(SAFETY/MAX_TOKENS/RECITATION/…)은 사유를 담은 실패로 반환 → Lightboard "응답이 비어있습니다. 검열?" 추측 대신 이유가 보임. upstream `pnpm check` 0 errors, request 경로 테스트 174/174.
 - 두 패치 모두 v1.14.0·v1.15.0 태그에 `--3way` 없이 깨끗이 적용됨.
 - 서버 쪽(`server.cjs` 토큰·hub-proxy 타임아웃)은 번들 범위 밖 — 로컬 PocketRisu 클론 브랜치 `fix/bounded-fetches-and-empty-responses`에 보관, 컨테이너를 직접 빌드할 때만 적용.
+- 같은 날 upstream **v1.15.1** 핫픽스(#104, Vite 8.3.4 — Termux ARMv8.0 빌드). 소스 변경 없이 `package.json`·lockfile만 → lock을 v1.15.1로, 패치 6개 그대로 적용. 서버는 v1.15.0에 머물러도 동작 차이 없음(번들 모드만 서버 버전 == 번들 버전 조건이라, 서버를 1.15.1로 올려야 켜짐).
 
 ### 미검증 / 다음
 - 패치 050: 실기기에서 삽화 생성 직후 스크롤·채팅 이동 없이 이미지가 뜨는지. 로그엔 안 남으니 육안 확인.

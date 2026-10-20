@@ -85,3 +85,4 @@ PocketRisu 릴리스 공지
 |---|---|---|---|---|
 | 1.14.0 | 0.1.0 (M1) | — (기준) | — | 2026-10-16 |
 | 1.15.0 | 0.1.0-dev.15 → 다음 nightly | 계약 파일 중 `server.cjs`·`parser.svelte.ts` 변경 있음(#102 에셋 스윕·프리셋 복구). C1~C14 대조 결과 앱이 쓰는 경로·헤더·전역 변경 없음. 패치 010~040 `--3way` 적용 확인 | `upstream.lock` v1.15.0, `VERIFIED_SERVER_VERSIONS` 추가, 패치 050·060 추가(C6e·C6f) | 2026-10-20 |
+| 1.15.1 | 다음 nightly | 없음 — 변경 파일은 `package.json`·`pnpm-lock.yaml`뿐(#104, Termux ARMv8.0용 Vite 8.3.4). 계약 파일 변경 0 | `upstream.lock` v1.15.1, `VERIFIED_SERVER_VERSIONS` 추가. 패치 6개 `git apply --check` 통과 | 2026-10-20 |
