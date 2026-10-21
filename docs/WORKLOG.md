@@ -168,7 +168,15 @@
 - 서버 쪽(`server.cjs` 토큰·hub-proxy 타임아웃)은 번들 범위 밖 — 로컬 PocketRisu 클론 브랜치 `fix/bounded-fetches-and-empty-responses`에 보관, 컨테이너를 직접 빌드할 때만 적용.
 - 같은 날 upstream **v1.15.1** 핫픽스(#104, Vite 8.3.4 — Termux ARMv8.0 빌드). 소스 변경 없이 `package.json`·lockfile만 → lock을 v1.15.1로, 패치 6개 그대로 적용. 서버는 v1.15.0에 머물러도 동작 차이 없음(번들 모드만 서버 버전 == 번들 버전 조건이라, 서버를 1.15.1로 올려야 켜짐).
 
+### dev.20 로그 (10/21) — 캐릭터 가져오기 무반응, upstream v1.15.2
+- 번들 모드 정상: `mode=bundled v1.15.1 patchSync=true` → `Bundle healthy`. 409·토큰 HTML 0건.
+- **T-20**: 가져오기에서 파일을 골라도 무반응. 로그에 선택·쓰기 흔적 없음 → `FileChooserParams.parseResult`가 `ClipData`를 무시해 `null`을 돌려주는 경로. `parseFileChooserResult()`로 교체 + 선택창 열림/결과 로그 추가. 실기기 재현 로그로 확정 필요.
+- `SyntaxError: Invalid regular expression: /<img="(?!(?:(?:shiro|…` 162건(10/20 23:15~): 캐릭터 `f008a40d`를 열 때마다 그 카드의 정규식 스크립트가 컴파일 실패(`scripts.ts`가 플래그 없으면 `u`를 붙임 — `u` 모드에서 이스케이프 안 된 `{`·`-` 등이 에러). 스크립트는 건너뛰어지고 채팅은 동작하므로 가져오기 문제와 무관. 로그 줄이 384자에서 잘려 정확한 사유는 불명 — 카드의 정규식 `in`을 직접 확인해야 함.
+- upstream **v1.15.2**(PR #107, Lua 엔진 옵션 1줄): 계약 파일 변경 0, 패치 6개 그대로 적용. lock → v1.15.2.
+- **T-21**: 모듈 가져오기에서 `.risum`이 회색 비활성. `createIntent()`가 확장자 accept를 MIME으로 넘김 → `fileChooserIntent()`로 교체(진짜 MIME만, 아니면 `*/*`). T-20과 합쳐 `FileChooserParams` 기본 헬퍼 의존 0.
+
 ### 미검증 / 다음
+- T-20: 다음 nightly로 가져오기 재현 → `file chooser result code=-1 uris=N` 뒤에 쓰기 요청이 이어지는지.
 - 패치 050: 실기기에서 삽화 생성 직후 스크롤·채팅 이동 없이 이미지가 뜨는지. 로그엔 안 남으니 육안 확인.
 - 패치 060: Lightboard 빈 응답 재발 시 `Model returned no text (finishReason: …)` 문구가 뜨는지 → SAFETY면 프롬프트, MAX_TOKENS면 maxOutputTokens/thinking 조정.
 - 서버 env `POCKETRISU_BACKUP_INTERVAL_MS` 확대 후 정지 재발 여부.

@@ -90,7 +90,7 @@ android {
         buildConfigField("String", "UPDATE_REPO_OWNER", "\"${findProperty("updateRepoOwner") ?: "SUS7898"}\"")
         buildConfigField("String", "UPDATE_REPO_NAME", "\"${findProperty("updateRepoName") ?: "PocketRisu_app"}\"")
         // PocketRisu server versions this app build was verified against (diagnostics banner only).
-        buildConfigField("String", "VERIFIED_SERVER_VERSIONS", "\"1.14.0, 1.15.0, 1.15.1\"")
+        buildConfigField("String", "VERIFIED_SERVER_VERSIONS", "\"1.14.0, 1.15.0, 1.15.1, 1.15.2\"")
         // Upstream version of the web UI bundled in this APK ("" = none; bundled mode off).
         buildConfigField("String", "BUNDLED_UPSTREAM_VERSION", "\"$bundledUpstreamVersion\"")
     }
