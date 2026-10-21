@@ -76,7 +76,8 @@ class MainActivity : AppCompatActivity() {
     private val healthCheck = Runnable { if (!session.apiSeen) fallbackToServerUi("no /api traffic within ${HEALTH_TIMEOUT_MS / 1000}s") }
 
     private val fileChooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val uris = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+        val uris = parseFileChooserResult(result.resultCode, result.data)
+        AppLog.i(TAG, "file chooser result code=${result.resultCode} uris=${uris?.size ?: 0}")
         fileChooserCallback?.onReceiveValue(uris)
         fileChooserCallback = null
     }
@@ -423,7 +424,8 @@ class MainActivity : AppCompatActivity() {
     private fun launchFileChooser(callback: ValueCallback<Array<Uri>>, params: WebChromeClient.FileChooserParams): Boolean {
         fileChooserCallback?.onReceiveValue(null)
         fileChooserCallback = callback
-        return runCatching { fileChooser.launch(params.createIntent()); true }
+        AppLog.i(TAG, "file chooser open mode=${params.mode} accept=${params.acceptTypes.joinToString(",")}")
+        return runCatching { fileChooser.launch(fileChooserIntent(params)); true }
             .getOrElse {
                 AppLog.w(TAG, "file chooser unavailable", it)
                 fileChooserCallback = null
@@ -529,5 +531,38 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "Shell"
         private const val PROBE_TIMEOUT_MS = 6_000L
         private const val HEALTH_TIMEOUT_MS = 30_000L
+
+        // FileChooserParams.parseResult only reads Intent.data. A picker answering a
+        // MODE_OPEN_MULTIPLE request (PocketRisu's character import) may put the
+        // selection in ClipData instead — then parseResult returns null, the page's
+        // <input type=file> never fires `change`, and the import silently does
+        // nothing (TROUBLESHOOTING T-20).
+        // FileChooserParams.createIntent() passes the page's accept list to the picker
+        // verbatim. PocketRisu's import dialogs use extension-only accepts
+        // (".json,.lorebook,.risum,.charx"); Android pickers match MIME types, so
+        // those files show up greyed out and cannot be chosen (TROUBLESHOOTING T-21).
+        // Keep real MIME types, drop anything else and fall back to */*.
+        internal fun fileChooserIntent(params: WebChromeClient.FileChooserParams): Intent {
+            val mimes = params.acceptTypes.filter { it.contains('/') }
+            return Intent(Intent.ACTION_GET_CONTENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = if (mimes.size == 1) mimes[0] else "*/*"
+                if (mimes.size > 1) putExtra(Intent.EXTRA_MIME_TYPES, mimes.toTypedArray())
+                if (params.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) {
+                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                }
+            }
+        }
+
+        internal fun parseFileChooserResult(resultCode: Int, data: Intent?): Array<Uri>? {
+            if (resultCode != android.app.Activity.RESULT_OK || data == null) return null
+            val clip = data.clipData
+            if (clip != null && clip.itemCount > 0) {
+                // Item.uri is nullable (text-only clip items); never hand the page a null slot.
+                val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+                if (uris.isNotEmpty()) return uris.toTypedArray()
+            }
+            return data.data?.let { arrayOf(it) }
+        }
     }
 }

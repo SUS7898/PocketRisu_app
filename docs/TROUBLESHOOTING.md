@@ -201,6 +201,20 @@
 - 원인: Git for Windows 시스템 설정 `core.autocrlf=true`. `patches/*.patch`가 체크아웃 때 CRLF로 변환돼(`git ls-files --eol` → `w/crlf`) LF인 upstream 트리에 한 줄도 맞지 않았다. CR을 지우면 전부 적용됨(`tr -d '\r' < p | git apply --check`). CI(ubuntu)는 변환이 없어 통과하므로 로컬에서만 재현된다.
 - 해결: `.gitattributes`에 `*.patch -text`. 이미 체크아웃된 저장소는 `rm patches/*.patch && git checkout -- patches/`로 다시 받아야 적용된다(`git checkout --`만으로는 "변경 없음"으로 보고 건드리지 않음). 판별법: 실패한 패치의 대상 파일이 upstream diff에 없으면 리베이스가 아니라 줄바꿈을 먼저 의심.
 
+## T-20. 캐릭터 가져오기에서 파일을 골라도 아무 반응이 없음 (에러도 없음)
+- 발생: 2026-10-21, Tab S7+, dev.20(번들 v1.15.1). 로그에는 파일 선택·쓰기 요청 흔적이 전혀 없음 — 선택 이후 JS가 파일을 받지 못했다는 뜻.
+- 원인(코드): `MainActivity`의 선택 결과 처리가 `WebChromeClient.FileChooserParams.parseResult()`에 의존했는데, 이 API는 **`Intent.data`만 읽고 `ClipData`를 무시**한다. PocketRisu의 캐릭터 가져오기는 `<input type=file multiple>`(`MODE_OPEN_MULTIPLE`)이라 피커가 `EXTRA_ALLOW_MULTIPLE`로 열리고, 삼성 내 파일/DocumentsUI는 이 모드에서 선택 결과를 `ClipData`에 담는 경우가 있다 → `parseResult`가 `null` → `onReceiveValue(null)` → 페이지의 `change` 이벤트가 안 떠서 `selectFileByDom`의 Promise가 영원히 대기. 에러가 없는 이유이기도 하다.
+- 해결: `parseFileChooserResult()` — `ClipData`가 있으면 그 항목 전부, 없으면 `data`. 선택창 열림/결과(`file chooser open mode=… accept=…`, `file chooser result code=… uris=N`)를 로그로 남겨 다음부터는 어느 단계에서 끊기는지 보이게 함.
+- 확인: 가져오기 뒤 로그에 `file chooser result … uris=1` 이상 → 이어서 `POST write`/`bulk-write`가 찍혀야 함. `uris=0`이면 피커 쪽(취소 또는 권한), 로그 자체가 없으면 `onShowFileChooser`가 안 불린 것(JS `input.click()`이 사용자 제스처 밖에서 호출됨).
+- 같은 패턴(P8 — 콜백이 null로 끝나면 상대편 Promise가 조용히 멈춤): upstream `selectFileByDom`은 피커 취소 시에도 resolve하지 않는다(`cancel` 이벤트 미처리). 앱 쪽은 이 수정으로 결과를 항상 전달하므로 취소 시 `null` → `change` 없이 종료되는 것은 upstream 동작 그대로.
+
+## T-21. 모듈 가져오기에서 `.risum` 등 파일이 회색으로 비활성돼 선택이 안 됨
+- 발생: 2026-10-21, Tab S7+, dev.20. 캐릭터 가져오기(`accept="*"`)와 달리 모듈 가져오기는 `selectSingleFile(['json','lorebook','risum','charx'])` → `<input accept=".json,.lorebook,.risum,.charx">`.
+- 원인: `FileChooserParams.createIntent()`가 accept 목록을 그대로 피커 인텐트의 MIME 타입으로 넘긴다. 안드로이드 피커는 MIME으로만 거르므로 확장자 문자열(`.risum`)은 아무 파일과도 맞지 않아 전부 비활성 표시. 데스크톱 브라우저는 확장자 accept를 이해해서 upstream에서는 재현되지 않는다.
+- 해결: `fileChooserIntent()` — accept 중 `/`가 있는 진짜 MIME만 남기고, 없으면 `*/*`. 다중 선택은 `EXTRA_ALLOW_MULTIPLE`. 확장자 검증은 어차피 upstream `selectFileByDom`이 선택 후 다시 하므로(걸러지면 "지원하지 않는 파일 형식" 알림) 피커를 넓혀도 잘못된 파일이 들어오지 않는다.
+- 우회(앱 수정 전): PocketRisu 설정 → 고급 → **"Allow all in file select"**(`allowAllExtentionFiles`) 켜기 — upstream이 accept를 `*`로 바꿔 보낸다.
+- T-20과 뿌리가 같다: WebView의 `FileChooserParams` 기본 헬퍼(`createIntent`/`parseResult`) 둘 다 안드로이드 피커의 실제 동작과 어긋난다. 둘 다 교체했으므로 이제 헬퍼에 의존하는 코드는 없다.
+
 ## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패
 - 발생: 2026-10-16 14:58, S26 Ultra(One UI, Android 17), dev.2 → dev.4 첫 시도. 두 번째 시도는 성공.
 - 원인: `SessionParams.setRequireUserAction(USER_ACTION_NOT_REQUIRED)`를 요청하면 One UI가 "알 수 없는 출처" 패키지의 자체 업데이트를 세션 단계에서 거부함(사용자 확인 창이 뜬 뒤 0.8초 만에 ABORTED).
