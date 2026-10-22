@@ -60,6 +60,12 @@ class SettingsActivity : AppCompatActivity() {
         binding.batteryButton.setOnClickListener { requestBatteryExemption() }
         renderBattery()
 
+        binding.hwKeyboardSwitch.isChecked = settings.hideImeWithHardwareKeyboard
+        binding.hwKeyboardSwitch.setOnCheckedChangeListener { _, checked ->
+            settings.hideImeWithHardwareKeyboard = checked
+            AppLog.i("Shell", "setting hideImeWithHardwareKeyboard=$checked")
+        }
+
         binding.bundleSwitch.isChecked = settings.bundleEnabled
         binding.bundleSwitch.setOnCheckedChangeListener { _, checked ->
             settings.bundleEnabled = checked

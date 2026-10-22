@@ -175,7 +175,13 @@
 - upstream **v1.15.2**(PR #107, Lua 엔진 옵션 1줄): 계약 파일 변경 0, 패치 6개 그대로 적용. lock → v1.15.2.
 - **T-21**: 모듈 가져오기에서 `.risum`이 회색 비활성. `createIntent()`가 확장자 accept를 MIME으로 넘김 → `fileChooserIntent()`로 교체(진짜 MIME만, 아니면 `*/*`). T-20과 합쳐 `FileChooserParams` 기본 헬퍼 의존 0.
 
+### 입력 장치 — 하드웨어 키보드(Rii i4+) 대응 (10/22)
+- 앱에는 키보드·마우스 처리가 없었음. 확실한 한 가지만: **하드웨어 키보드가 붙어 있으면 화면 키보드를 띄우지 않음**(설정 → 입력 장치, 기본 켜짐). `applySystemInsets`의 insets 리스너에서 IME inset이 생기고 `Configuration.keyboard == QWERTY && hardKeyboardHidden == NO`이면 `WindowInsetsControllerCompat.hide(ime())` + 패딩에서 IME 제외. 로그 `ime hidden: hardware keyboard attached`(상태 전환 시 1회).
+- Enter 전송·Shift+Enter 줄바꿈은 upstream `sendWithEnter`(기본 켜짐)가 담당, 터치패드 마우스는 WebView 기본 처리 — 앱 수정 없음.
+- 전체 검토(R1~R10): OkHttp 타임아웃 설정됨(15/60s, probe 5/8/10s), GlobalScope·runBlocking 없음, 공유 상태는 `@Volatile`/`ConcurrentHashMap`/`AtomicInteger`, 로그는 `Redactor` 경유, 포그라운드 서비스 `specialUse` 명시. **숨은 문제 없음.** 최적화 후보(보류): WygLore `wl.web.v1` 초당 12회 읽기(T-13)를 InterceptLayer에서 단기 캐시 — 플러그인 쓰기와의 정합이 먼저라 설계 필요.
+
 ### 미검증 / 다음
+- 하드웨어 키보드: Rii i4+ 연결 상태에서 입력창 터치 → 화면 키보드가 안 뜨고 로그에 `ime hidden` 1회. 키보드를 끈 뒤에는 정상적으로 떠야 함(`configuration changed in place: keyboard,keyboardHidden` 뒤).
 - T-20: 다음 nightly로 가져오기 재현 → `file chooser result code=-1 uris=N` 뒤에 쓰기 요청이 이어지는지.
 - 패치 050: 실기기에서 삽화 생성 직후 스크롤·채팅 이동 없이 이미지가 뜨는지. 로그엔 안 남으니 육안 확인.
 - 패치 060: Lightboard 빈 응답 재발 시 `Model returned no text (finishReason: …)` 문구가 뜨는지 → SAFETY면 프롬프트, MAX_TOKENS면 maxOutputTokens/thinking 조정.
