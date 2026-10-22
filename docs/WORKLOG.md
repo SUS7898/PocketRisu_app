@@ -180,7 +180,16 @@
 - Enter 전송·Shift+Enter 줄바꿈은 upstream `sendWithEnter`(기본 켜짐)가 담당, 터치패드 마우스는 WebView 기본 처리 — 앱 수정 없음.
 - 전체 검토(R1~R10): OkHttp 타임아웃 설정됨(15/60s, probe 5/8/10s), GlobalScope·runBlocking 없음, 공유 상태는 `@Volatile`/`ConcurrentHashMap`/`AtomicInteger`, 로그는 `Redactor` 경유, 포그라운드 서비스 `specialUse` 명시. **숨은 문제 없음.** 최적화 후보(보류): WygLore `wl.web.v1` 초당 12회 읽기(T-13)를 InterceptLayer에서 단기 캐시 — 플러그인 쓰기와의 정합이 먼저라 설계 필요.
 
+### upstream v1.16.0 (10/22) — 패치 010·040 리베이스
+- 큰 릴리스(계정 가져오기, 세션 요청 30초 타임아웃, 413, 정규식 로어북 수정, 원본 v2026.10.211 동기화). 계약 체크리스트 C1~C14 대조 결과 앱이 쓰는 경로·헤더·주입 전역 변경 없음. `risuSave.ts`에 블록 타입 `KV = 12` 예약 추가 — "PocketRisu가 쓰지 않음"이라 디코더 폴백 그대로.
+- **010**: `nodeStorage.ts` 상단에 `RISU_ACCOUNT_REQUEST_TIMEOUT_MS`·`AUTH_REQUEST_TIMEOUT_MS` 상수가 추가돼 컨텍스트만 어긋남 → 재생성.
+- **040**: `_doRefreshToken`이 `fetch` → `authRequest`(30초 타임아웃 래퍼)로 바뀜. 같은 의도로 재작성: 토큰 없으면 refresh를 빈 헤더로 보내지 않고, 세션 쿠키로 `/api/test_auth` 재발급도 `authRequest` 경유(타임아웃 적용). `createAuth` 여유 4분은 그대로.
+- 리베이스는 LF 클론(`git -c core.autocrlf=false clone` + `git config core.autocrlf false`)에서 파이썬으로 치환 → `git diff`. `reset --hard`만 해도 CRLF로 되돌아가므로 로컬 config 설정이 필수(T-19 보강).
+- 서버 쪽 `RISU_UPDATE: required` — 나스 업데이트 필수.
+- `scripts/build-frontend.sh`: 이전 실행이 남긴 패치 적용 상태(dirty tree) 때문에 lock이 **다른 태그로** 바뀌는 첫 실행에서 `checkout`이 거부됨(`Your local changes … would be overwritten`). 체크아웃 전에 `reset --hard`를 한 번 더. CI는 매번 새 클론이라 로컬에서만 나던 문제.
+
 ### 미검증 / 다음
+- v1.16.0 번들: `mode=bundled v1.16.0`, 패치 040 로그 `[Storage] JWT re-issued from the session cookie`가 필요할 때만 뜨는지.
 - 하드웨어 키보드: Rii i4+ 연결 상태에서 입력창 터치 → 화면 키보드가 안 뜨고 로그에 `ime hidden` 1회. 키보드를 끈 뒤에는 정상적으로 떠야 함(`configuration changed in place: keyboard,keyboardHidden` 뒤).
 - T-20: 다음 nightly로 가져오기 재현 → `file chooser result code=-1 uris=N` 뒤에 쓰기 요청이 이어지는지.
 - 패치 050: 실기기에서 삽화 생성 직후 스크롤·채팅 이동 없이 이미지가 뜨는지. 로그엔 안 남으니 육안 확인.

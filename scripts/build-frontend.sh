@@ -28,6 +28,9 @@ else
   git -C "$UPSTREAM_DIR" fetch --depth 1 origin "refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null \
     || git -C "$UPSTREAM_DIR" fetch --depth 1 origin tag "$TAG"
 fi
+# Drop the previous run's applied patches BEFORE switching tags: a dirty tree makes
+# `checkout` refuse the moment upstream.lock moves to a new tag (first seen v1.15.2 → v1.16.0).
+git -C "$UPSTREAM_DIR" reset -q --hard
 git -C "$UPSTREAM_DIR" checkout -q --detach "$TAG"
 git -C "$UPSTREAM_DIR" reset -q --hard
 git -C "$UPSTREAM_DIR" clean -qfd -e node_modules -e dist

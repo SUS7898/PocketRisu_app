@@ -1,5 +1,5 @@
 diff --git a/src/ts/storage/nodeStorage.ts b/src/ts/storage/nodeStorage.ts
-index a0753e7..f516153 100644
+index 00012eb..6ed1e21 100644
 --- a/src/ts/storage/nodeStorage.ts
 +++ b/src/ts/storage/nodeStorage.ts
 @@ -16,7 +16,10 @@ const AUTH_FETCH_TRANSIENT_BASE_DELAY_MS = 500
@@ -11,6 +11,6 @@ index a0753e7..f516153 100644
 +// longer than 30s on large databases; the 30s abort + retry turned a slow chat open into a
 +// failed one (docs/TROUBLESHOOTING.md T-7). The retry for half-open links is kept.
 +const FIRST_BYTE_TIMEOUT_MS = 120_000
- 
- export type StorageFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
- 
+ const RISU_ACCOUNT_REQUEST_TIMEOUT_MS = 30_000
+ // Every storage call waits for the shared authentication (test_auth,
+ // password hashing, login, token refresh, session cookie), so one of those
