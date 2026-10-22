@@ -1,8 +1,8 @@
 diff --git a/src/ts/storage/nodeStorage.ts b/src/ts/storage/nodeStorage.ts
-index a0753e7..6e47806 100644
+index 6ed1e21..c9b8ba3 100644
 --- a/src/ts/storage/nodeStorage.ts
 +++ b/src/ts/storage/nodeStorage.ts
-@@ -227,7 +227,11 @@ export class NodeStorage{
+@@ -312,7 +312,11 @@ export class NodeStorage{
  
      async createAuth(){
          const now = Date.now()
@@ -15,25 +15,23 @@ index a0753e7..6e47806 100644
              return this.cachedJwt.token
          }
          const token = await this._refreshToken()
-@@ -275,14 +279,35 @@ export class NodeStorage{
+@@ -360,13 +364,33 @@ export class NodeStorage{
      }
  
      private async _doRefreshToken(): Promise<string> {
--        const res = await fetch('/api/token/refresh', {
+-        const data = await authRequest('/api/token/refresh', {
 -            method: 'POST',
 -            headers: { 'risu-auth': this.cachedJwt?.token ?? '' }
--        })
--        if (res.ok) {
--            const data = await res.json()
+-        }, async (res) => res.ok ? await res.json() : null)
+-        if (data) {
 -            this.cachedJwt = { token: data.token, expiresAt: Date.now() + 5 * 60 * 1000 }
 -            return data.token
 +        if (this.cachedJwt?.token) {
-+            const res = await fetch('/api/token/refresh', {
++            const data = await authRequest('/api/token/refresh', {
 +                method: 'POST',
 +                headers: { 'risu-auth': this.cachedJwt.token }
-+            })
-+            if (res.ok) {
-+                const data = await res.json()
++            }, async (res) => res.ok ? await res.json() : null)
++            if (data) {
 +                this.cachedJwt = { token: data.token, expiresAt: Date.now() + 5 * 60 * 1000 }
 +                return data.token
 +            }
@@ -44,15 +42,14 @@ index a0753e7..6e47806 100644
 +        // the Vertex token endpoint) then failed with "No auth header" until some authFetch ran
 +        // runAuthCheck (docs/TROUBLESHOOTING.md T-18). Mint a token from the session cookie
 +        // instead: /api/test_auth answers { status: 'success', token } when the cookie is valid.
++        // Rebased on v1.16.0: goes through authRequest so the 30s auth timeout applies here too.
 +        try {
-+            const res = await fetch('/api/test_auth', { credentials: 'same-origin' })
-+            if (res.ok) {
-+                const data = await res.json()
-+                if (data?.status === 'success' && typeof data.token === 'string' && data.token) {
-+                    this.cachedJwt = { token: data.token, expiresAt: Date.now() + 5 * 60 * 1000 }
-+                    console.warn('[Storage] JWT re-issued from the session cookie')
-+                    return data.token
-+                }
++            const data = await authRequest('/api/test_auth', { credentials: 'same-origin' },
++                async (res) => res.ok ? await res.json() : null)
++            if (data?.status === 'success' && typeof data.token === 'string' && data.token) {
++                this.cachedJwt = { token: data.token, expiresAt: Date.now() + 5 * 60 * 1000 }
++                console.warn('[Storage] JWT re-issued from the session cookie')
++                return data.token
 +            }
 +        } catch {
 +            // fall through: the caller gets whatever we have, exactly as before

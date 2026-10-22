@@ -200,6 +200,7 @@
 - 발생: 2026-10-20, Windows, v1.15.0으로 lock을 올린 직후. `010-chat-first-byte-timeout-120s.patch`가 `nodeStorage.ts:16`에서 실패했지만 v1.14.0→v1.15.0 diff에 그 파일 변경이 없음.
 - 원인: Git for Windows 시스템 설정 `core.autocrlf=true`. `patches/*.patch`가 체크아웃 때 CRLF로 변환돼(`git ls-files --eol` → `w/crlf`) LF인 upstream 트리에 한 줄도 맞지 않았다. CR을 지우면 전부 적용됨(`tr -d '\r' < p | git apply --check`). CI(ubuntu)는 변환이 없어 통과하므로 로컬에서만 재현된다.
 - 해결: `.gitattributes`에 `*.patch -text`. 이미 체크아웃된 저장소는 `rm patches/*.patch && git checkout -- patches/`로 다시 받아야 적용된다(`git checkout --`만으로는 "변경 없음"으로 보고 건드리지 않음). 판별법: 실패한 패치의 대상 파일이 upstream diff에 없으면 리베이스가 아니라 줄바꿈을 먼저 의심.
+- 패치를 **새로 만들 때**(리베이스)도 같은 함정: upstream 클론에서 `git -c core.autocrlf=false clone …`만으로는 부족하고, 그 클론 안에서 `git config core.autocrlf false`를 해 둬야 이후 `git reset --hard`·`checkout`이 파일을 CRLF로 되돌리지 않는다. 편집은 줄바꿈을 보존하는 도구(파이썬 `newline=''`)로, 생성한 패치는 `git ls-files --eol`이 `w/lf`인 상태에서 `git apply --check`로 확인(v1.16.0 리베이스 때 확인).
 
 ## T-20. 캐릭터 가져오기에서 파일을 골라도 아무 반응이 없음 (에러도 없음)
 - 발생: 2026-10-21, Tab S7+, dev.20(번들 v1.15.1). 로그에는 파일 선택·쓰기 요청 흔적이 전혀 없음 — 선택 이후 JS가 파일을 받지 못했다는 뜻.
