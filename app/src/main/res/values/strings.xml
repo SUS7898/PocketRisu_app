@@ -54,6 +54,9 @@
     <string name="settings_keepalive_help">켜면 앱이 쓰이는 동안 조용한 알림이 하나 떠 있고, 홈 화면이나 다른 앱으로 나갔다 와도 처음부터 다시 불러오는 일이 크게 줄어듭니다. 그래도 끊기면 아래 절전 예외를 허용하세요.</string>
     <string name="settings_battery_exempt">배터리 최적화 예외 허용</string>
     <string name="settings_battery_exempt_done">이미 예외로 설정됨</string>
+    <string name="settings_section_input">입력 장치</string>
+    <string name="settings_hw_keyboard">하드웨어 키보드 연결 시 화면 키보드 숨김</string>
+    <string name="settings_hw_keyboard_help">블루투스 키보드(Rii i4+ 등)가 붙어 있으면 입력창을 눌러도 화면 키보드를 띄우지 않습니다. 화면 키보드로 입력하려면 끄세요. Enter 전송·Shift+Enter 줄바꿈은 PocketRisu 설정의 "Enter로 전송"이 담당합니다.</string>
     <string name="keepalive_channel">세션 유지</string>
     <string name="keepalive_title">PocketRisu 세션 유지 중</string>
     <string name="keepalive_text">앱을 전환해도 채팅을 다시 불러오지 않도록 유지합니다</string>

@@ -159,16 +159,31 @@ class MainActivity : AppCompatActivity() {
      */
     private fun applySystemInsets() {
         val root = binding.root
+        var imeSuppressed = false
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            // A Bluetooth keyboard (Rii i4+ and the like) still makes Android raise the on-screen
+            // keyboard whenever the chat input gets focus, hiding half the page. With one attached,
+            // send the IME straight back down; the hardware keys keep typing into the field.
+            val suppress = ime.bottom > 0 && settings.hideImeWithHardwareKeyboard && hasHardwareKeyboard()
+            if (suppress) {
+                if (!imeSuppressed) AppLog.i(TAG, "ime hidden: hardware keyboard attached")
+                WindowInsetsControllerCompat(window, v).hide(WindowInsetsCompat.Type.ime())
+            }
+            imeSuppressed = suppress
+            v.setPadding(bars.left, bars.top, bars.right, if (suppress) bars.bottom else maxOf(bars.bottom, ime.bottom))
             WindowInsetsCompat.CONSUMED
         }
         WindowInsetsControllerCompat(window, root).apply {
             isAppearanceLightStatusBars = false
             isAppearanceLightNavigationBars = false
         }
+    }
+
+    private fun hasHardwareKeyboard(): Boolean {
+        val c = resources.configuration
+        return c.keyboard == Configuration.KEYBOARD_QWERTY && c.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
     }
 
     /**

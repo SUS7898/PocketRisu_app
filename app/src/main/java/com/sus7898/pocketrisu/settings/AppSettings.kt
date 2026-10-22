@@ -54,6 +54,12 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(KEY_KEEP_ALIVE, true)
         set(value) = prefs.edit { putBoolean(KEY_KEEP_ALIVE, value) }
 
+    /** With a hardware keyboard attached (e.g. a Bluetooth keyboard+touchpad), keep the on-screen
+     *  keyboard from covering half the chat each time an input gets focus. Default on. */
+    var hideImeWithHardwareKeyboard: Boolean
+        get() = prefs.getBoolean(KEY_HIDE_IME_HW_KEYBOARD, true)
+        set(value) = prefs.edit { putBoolean(KEY_HIDE_IME_HW_KEYBOARD, value) }
+
     /** Bundled UI mode (docs/DESIGN.md §4). Default on; the version gate decides per launch. */
     var bundleEnabled: Boolean
         get() = prefs.getBoolean(KEY_BUNDLE_ENABLED, true)
@@ -96,6 +102,7 @@ class AppSettings(context: Context) {
         private const val KEY_LAST_UPDATE_CHECK = "lastUpdateCheckMs"
         private const val KEY_KEEP_ALIVE = "keepAlive"
         private const val KEY_BUNDLE_ENABLED = "bundleEnabled"
+        private const val KEY_HIDE_IME_HW_KEYBOARD = "hideImeWithHardwareKeyboard"
         private const val KEY_BUNDLE_DISABLED_FOR = "bundleDisabledForVersion"
         private const val KEY_BUNDLE_FAILS = "bundleFailures"
         const val BUNDLE_MAX_FAILURES = 2
