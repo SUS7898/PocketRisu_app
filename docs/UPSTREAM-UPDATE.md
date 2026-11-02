@@ -63,7 +63,9 @@ gh api "repos/PocketRisu/PocketRisu/compare/v1.14.0...v1.15.0" \
 `scripts/build-frontend.sh`는 **제3자 코드를 실행한다** — upstream의 `pnpm install`(허용된 빌드 스크립트)과 `vite build`(upstream의 vite 설정·플러그인). upstream 저장소나 그 빌드 의존성이 오염되면 그 코드가 CI 러너에서 돈다. 같은 잡 안의 백그라운드 프로세스는 이후 스텝까지 살아남고, `/proc/<pid>/environ`과 `$RUNNER_TEMP`, 체크아웃이 남긴 `.git/config` 토큰을 읽을 수 있다.
 
 - `upstream-sync.yml`: **분리됨.** `build` 잡(읽기 전용 토큰, `persist-credentials: false`, 시크릿 없음)이 빌드만 하고, `publish` 잡(쓰기 권한)은 upstream 코드를 실행하지 않으며 태그를 API에서 다시 받아 `^v\d+\.\d+\.\d+$`로 검증한다. 태그명은 env로만 넘기고 `run:` 안에 `${{ }}`로 넣지 않는다(태그명에 `$(…)`가 들어갈 수 있다 — git 참조 규칙이 `$ ( ) ;`를 허용).
-- `ci.yml` nightly / `release.yml`: **미분리.** 번들 빌드와 서명이 같은 잡에 있다 → 빌드 단계가 남긴 프로세스가 이후 스텝의 서명 키(`$RUNNER_TEMP/release.jks`)·비밀번호(환경변수)를 읽을 수 있다. 서명 키가 새면 앱의 자체 업데이트 서명자 검증을 통과하는 APK를 만들 수 있다. 해결: 번들을 별도 잡(권한·시크릿 없음)에서 빌드해 artifact로 넘기고, 서명 잡은 upstream 코드를 실행하지 않는다.
+- `ci.yml` / `release.yml`: **분리됨.** `bundle` 잡(읽기 전용, 자격증명 미보존, 시크릿 없음)만 `build-frontend.sh`를 실행하고 `app/src/main/assets/bundle/`을 artifact로 넘긴다. `build`(테스트·디버그), `nightly`·`release`(서명) 잡은 artifact를 내려받기만 한다. 이전에는 번들 빌드와 서명이 같은 잡이라, 빌드 단계가 남긴 프로세스가 이후 스텝의 서명 키(`$RUNNER_TEMP/release.jks`)·비밀번호를 읽을 수 있었다 — 키가 새면 앱의 자체 업데이트 서명자 검증을 통과하는 APK를 만들 수 있다.
+- artifact도 제3자 산출물이다: 앱에 **데이터(asset)로만** 들어가야 한다. 유일하게 코드로 흘러가던 값 — `BUNDLE.json`의 `upstreamVersion` → `BuildConfig` Java 소스 — 은 Gradle에서 `\d+\.\d+\.\d+`만 허용한다(그 외는 빌드 실패). `"`처럼 javac가 파싱 전에 따옴표로 바꾸는 이스케이프로 주입할 수 있었다.
+- 검사 방법: 체크리스트 P9/P10 (`pocketrisu-review-checklist.md`).
 
 ## 2b. 버전 게이트 (`UiMode.decide`)
 
