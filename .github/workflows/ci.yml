@@ -83,7 +83,9 @@ jobs:
   nightly:
     name: Signed APK → nightly pre-release
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Also on workflow_dispatch: upstream-sync.yml commits the lock bump with GITHUB_TOKEN, whose
+    # push does not trigger workflows, and then dispatches this one explicitly.
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

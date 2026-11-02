@@ -208,14 +208,14 @@ class MainActivity : AppCompatActivity() {
         if (patchSync != null) settings.lastPatchSync = patchSync
         if (serverVersion != null) {
             session.bundleVerified = true
-            return UiMode.decide(true, bundleVersion, serverVersion, settings.bundleDisabledForVersion, patchSync ?: settings.lastPatchSync)
+            return UiMode.decide(true, bundleVersion, serverVersion, settings.bundleDisabledForVersion, patchSync ?: settings.lastPatchSync, settings.allowHotfixMismatch)
         }
         val cached = settings.lastServerVersion
         val cachedFresh = cached != null && System.currentTimeMillis() - settings.lastServerVersionAt < AppSettings.CACHED_SERVER_VERSION_MAX_AGE_MS
         if (cachedFresh) {
             session.bundleVerified = false
             AppLog.w("Bundle", "server probe failed within ${PROBE_TIMEOUT_MS}ms; starting on cached server version $cached (unverified)")
-            return UiMode.decide(true, bundleVersion, cached, settings.bundleDisabledForVersion, settings.lastPatchSync)
+            return UiMode.decide(true, bundleVersion, cached, settings.bundleDisabledForVersion, settings.lastPatchSync, settings.allowHotfixMismatch)
         }
         return UiMode.decide(true, bundleVersion, null, settings.bundleDisabledForVersion, null)
     }

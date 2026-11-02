@@ -188,7 +188,16 @@
 - 서버 쪽 `RISU_UPDATE: required` — 나스 업데이트 필수.
 - `scripts/build-frontend.sh`: 이전 실행이 남긴 패치 적용 상태(dirty tree) 때문에 lock이 **다른 태그로** 바뀌는 첫 실행에서 `checkout`이 거부됨(`Your local changes … would be overwritten`). 체크아웃 전에 `reset --hard`를 한 번 더. CI는 매번 새 클론이라 로컬에서만 나던 문제.
 
+### 업데이트 피로 해소 (11/02) — 자동화 수리 + 게이트 완화 + v1.17.0
+- 5주에 릴리스 7번(v1.13→v1.17). 매번 lock→PR→머지→설치는 지속 불가. 불편의 원인은 `UiMode.kt`의 완전 일치 게이트 한 줄.
+- **자동화**: `upstream-sync`가 매일 실패하던 원인은 저장소 설정("Actions가 PR 생성 허용" 꺼짐). 그런데 설정을 켜도 `GITHUB_TOKEN`이 만든 PR·푸시는 CI를 트리거하지 못해(예외: `workflow_dispatch`) 자동 머지→nightly가 이어지지 않는다. → PR 대신 **lock·`VERIFIED_SERVER_VERSIONS`를 main에 직접 커밋 + `gh workflow run ci.yml`**. `ci.yml`의 nightly 잡 조건에 `workflow_dispatch` 추가. PAT·저장소 설정 변경 없이 동작.
+- **게이트 완화**: `UiMode.decide(…, allowHotfixMismatch)` — `sameMinor`로 major.minor만 비교. 설정 "서버가 핫픽스 버전만 앞서도 내장 UI 유지"(기본 켜짐). 단위 테스트 3케이스 추가. 근거: 핫픽스 3회(1.15.1/1.15.2/1.16.1) 모두 계약 변경 0.
+- **v1.17.0**: 패치 6개 그대로 적용. `/proxy2` 응답 캐시 금지는 앱의 `/api/asset` 캐시와 무관. upstream이 `SafeMutationObserver` 콜백 버그를 고침 — `image_hover_preview` 플러그인의 "콜백 인자를 트리거로만" 우회는 그대로 둬도 무해.
+- 운영은 이제: 핫픽스 → 나스 `pull`만. 마이너 → 다음날 nightly 자동 → 태블릿 알림 탭 1회. 패치 리베이스가 필요할 때만 이슈가 열림.
+
 ### 미검증 / 다음
+- 게이트 완화: 서버 1.17.x 핫픽스가 나왔을 때 `mode=bundled v1.17.0` 유지되는지(로그에 `version mismatch` 없음).
+- 자동화: 다음 upstream 릴리스 다음날 12:17 KST 이후 main에 `upstream: PocketRisu v…` 커밋과 nightly 갱신이 있는지.
 - v1.16.0 번들: `mode=bundled v1.16.0`, 패치 040 로그 `[Storage] JWT re-issued from the session cookie`가 필요할 때만 뜨는지.
 - 하드웨어 키보드: Rii i4+ 연결 상태에서 입력창 터치 → 화면 키보드가 안 뜨고 로그에 `ime hidden` 1회. 키보드를 끈 뒤에는 정상적으로 떠야 함(`configuration changed in place: keyboard,keyboardHidden` 뒤).
 - T-20: 다음 nightly로 가져오기 재현 → `file chooser result code=-1 uris=N` 뒤에 쓰기 요청이 이어지는지.

@@ -22,6 +22,18 @@ class UiModeTest {
     }
 
     @Test
+    fun `hotfix-level server versions may run the bundle when allowed`() {
+        // Same minor, newer patch: tolerated only with the switch on.
+        assertEquals(UiMode.Bundled("1.16.0", true), UiMode.decide(true, "1.16.0", "1.16.2", null, true, allowHotfixMismatch = true))
+        assertTrue(UiMode.decide(true, "1.16.0", "1.16.2", null, true, allowHotfixMismatch = false).describe().contains("mismatch"))
+        // Minor bump is never tolerated.
+        assertTrue(UiMode.decide(true, "1.16.0", "1.17.0", null, true, allowHotfixMismatch = true).describe().contains("mismatch"))
+        // Helper edge cases: leading v, short strings.
+        assertTrue(UiMode.sameMinor("v1.16.0", "1.16.3"))
+        assertTrue(!UiMode.sameMinor("1.16", "1"))
+    }
+
+    @Test
     fun `patch sync flag is read from the server html`() {
         val html = "<html><head><script>globalThis.__NODE__ = true; globalThis.__PATCH_SYNC__ = true</script><meta charset=\"UTF-8\" />"
         assertEquals(true, ServerIndexProbe.parsePatchSync(html))

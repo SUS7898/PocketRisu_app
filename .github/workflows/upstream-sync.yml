@@ -1,27 +1,42 @@
 name: Upstream sync
 
 # Daily: if PocketRisu published a newer release than upstream.lock, try to build the bundled UI
-# from it (patches/ applied). Success → a pull request that bumps upstream.lock, with the
-# contract-file diff summary from docs/UPSTREAM-UPDATE.md §1 in its body. Failure → an issue.
-# Merging the PR is a human decision (docs/UPSTREAM-UPDATE.md §3).
+# from it (patches/ applied). Success → the lock bump is committed to main and the nightly build
+# is dispatched. Failure → an issue (the only case that needs a human: patch rebase).
+# docs/UPSTREAM-UPDATE.md §2a.
+#
+# Two jobs on purpose (docs/UPSTREAM-UPDATE.md §2c):
+#   build   — runs third-party code (upstream's pnpm install + vite build). Read-only token,
+#             credentials not persisted, no secrets. Nothing it outputs is trusted except
+#             "did the build succeed".
+#   publish — never runs upstream code. Re-derives the tag from the GitHub API, validates it,
+#             and only then writes to main / opens the issue.
+# Tag names come from a third-party repository; they are validated against vX.Y.Z and passed
+# through env, never interpolated into a script with ${{ }}.
 
 on:
   schedule:
     - cron: "17 3 * * *" # 03:17 UTC = 12:17 KST
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+permissions: {}
 
 jobs:
-  sync:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.cmp.outputs.changed }}
+      build_ok: ${{ steps.build.outcome == 'success' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
+      # Runs before any upstream code exists on the runner, so the token in this step's env
+      # cannot be read by it.
       - name: Compare upstream.lock with the latest PocketRisu release
         id: cmp
         env:
@@ -30,24 +45,13 @@ jobs:
           set -euo pipefail
           CURRENT=$(tr -d '[:space:]' < upstream.lock)
           LATEST=$(gh api repos/PocketRisu/PocketRisu/releases/latest --jq .tag_name)
-          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          [[ "$LATEST" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::unexpected upstream tag name"; exit 1; }
           if [ "$CURRENT" = "$LATEST" ]; then
             echo "up to date ($CURRENT)"; echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "new upstream: $CURRENT -> $LATEST"; echo "changed=true" >> "$GITHUB_OUTPUT"
-            # Contract files the app depends on (docs/UPSTREAM-UPDATE.md §1).
-            gh api "repos/PocketRisu/PocketRisu/compare/$CURRENT...$LATEST" \
-              --jq '.files[] | select(.filename | test("server/node/server[.]cjs|server/node/model-jobs[.]cjs|src/ts/storage/(nodeStorage|risuSave|database[.]svelte|chatDeltaSync|chatStorage)[.]ts|src/ts/platform[.]ts|src/ts/parser/parser[.]svelte[.]ts|src/ts/process/stableDiff[.]ts")) | "- `\(.filename)` +\(.additions) −\(.deletions)"' \
-              > contract-diff.md || true
-            [ -s contract-diff.md ] || echo "- (계약 파일 변경 없음)" > contract-diff.md
-            { echo "contract_diff<<CONTRACT_EOF"; cat contract-diff.md; echo "CONTRACT_EOF"; } >> "$GITHUB_OUTPUT"
-            echo "notes_url=https://github.com/PocketRisu/PocketRisu/releases/tag/$LATEST" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "$LATEST" > upstream.lock
           fi
-
-      - name: Skip (already current)
-        if: steps.cmp.outputs.changed != 'true'
-        run: echo "nothing to do"
 
       - uses: actions/setup-node@v4
         if: steps.cmp.outputs.changed == 'true'
@@ -58,50 +62,116 @@ jobs:
         with:
           version: 10.34.1
 
+      # Third-party code runs from here on.
       - name: Try building the bundle from the new tag
         id: build
         if: steps.cmp.outputs.changed == 'true'
         continue-on-error: true
         run: |
           set -euo pipefail
-          echo "${{ steps.cmp.outputs.latest }}" > upstream.lock
           PNPM=pnpm scripts/build-frontend.sh 2>&1 | tee build.log
-          rm -rf app/src/main/assets/bundle
 
-      - name: Open pull request (build succeeded)
-        if: steps.cmp.outputs.changed == 'true' && steps.build.outcome == 'success'
-        uses: peter-evans/create-pull-request@v7
-        with:
-          branch: upstream/${{ steps.cmp.outputs.latest }}
-          title: "upstream: PocketRisu ${{ steps.cmp.outputs.latest }}"
-          commit-message: "upstream.lock: ${{ steps.cmp.outputs.current }} → ${{ steps.cmp.outputs.latest }}"
-          add-paths: upstream.lock
-          body: |
-            PocketRisu ${{ steps.cmp.outputs.current }} → **${{ steps.cmp.outputs.latest }}** — 패치 적용·번들 빌드 성공.
-
-            릴리스 노트: ${{ steps.cmp.outputs.notes_url }}
-
-            ### 계약 파일 변경 (docs/UPSTREAM-UPDATE.md §2 체크리스트로 대조할 것)
-            ${{ steps.cmp.outputs.contract_diff }}
-
-            병합 전: 체크리스트 C1~C14 확인 → `VERIFIED_SERVER_VERSIONS` 갱신 → 실기기 로그 확인.
-            병합 후: nightly가 새 번들로 빌드됨 → 앱 업데이트 → NAS `docker compose pull`.
-
-      - name: Open issue (build or patch failed)
+      - name: Keep the build log for the failure issue
         if: steps.cmp.outputs.changed == 'true' && steps.build.outcome != 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-build-log
+          path: build.log
+          retention-days: 14
+
+  publish:
+    needs: build
+    if: needs.build.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # commit the lock bump to main
+      actions: write    # gh workflow run ci.yml (nightly)
+      issues: write     # failure report
+    steps:
+      - uses: actions/checkout@v4
+
+      # Independent of the build job's outputs (which ran next to untrusted code).
+      - name: Resolve and validate the upstream tag
+        id: tag
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TITLE="upstream ${{ steps.cmp.outputs.latest }}: 번들 빌드/패치 실패 — 리베이스 필요"
+          CURRENT=$(tr -d '[:space:]' < upstream.lock)
+          LATEST=$(gh api repos/PocketRisu/PocketRisu/releases/latest --jq .tag_name)
+          [[ "$LATEST" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::unexpected upstream tag name"; exit 1; }
+          [[ "$CURRENT" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::unexpected upstream.lock"; exit 1; }
+          [ "$CURRENT" != "$LATEST" ] || { echo "already current"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          # Contract files the app depends on (docs/UPSTREAM-UPDATE.md §1). Data only — written to
+          # a file and cat'ed, never evaluated.
+          gh api "repos/PocketRisu/PocketRisu/compare/$CURRENT...$LATEST" \
+            --jq '.files[] | select(.filename | test("server/node/server[.]cjs|server/node/model-jobs[.]cjs|src/ts/storage/(nodeStorage|risuSave|database[.]svelte|chatDeltaSync|chatStorage)[.]ts|src/ts/platform[.]ts|src/ts/parser/parser[.]svelte[.]ts|src/ts/process/stableDiff[.]ts|src/ts/globalApi[.]svelte[.]ts|src/lib/ChatScreens/ChatBody[.]svelte|src/ts/process/request/request[.]ts")) | "- `\(.filename)` +\(.additions) −\(.deletions)"' \
+            > contract-diff.md || true
+          [ -s contract-diff.md ] || echo "- (계약 파일 변경 없음)" > contract-diff.md
+
+      # The build job proved patches apply and the bundle builds on this tag. GITHUB_TOKEN pushes do
+      # not trigger workflows (GitHub rule), so the nightly is started via workflow_dispatch — the one
+      # event the rule exempts. No PAT, no repository-setting change, no PR to merge.
+      - name: Commit the lock bump to main and build the nightly
+        if: steps.tag.outputs.skip == 'false' && needs.build.outputs.build_ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ steps.tag.outputs.latest }}
+          CURRENT: ${{ steps.tag.outputs.current }}
+        run: |
+          set -euo pipefail
+          VER="${LATEST#v}"
+          printf '%s\n' "$LATEST" > upstream.lock
+          # VERIFIED_SERVER_VERSIONS = "a, b, c" → append the new version unless already listed.
+          if ! grep -q "\"[^\"]*\b${VER//./\\.}\b[^\"]*\"" <(grep 'VERIFIED_SERVER_VERSIONS' app/build.gradle.kts); then
+            sed -i -E "s/(\"VERIFIED_SERVER_VERSIONS\", \"\\\\\")([^\\\\]*)(\\\\\"\")/\1\2, ${VER}\3/" app/build.gradle.kts
+          fi
+          grep 'VERIFIED_SERVER_VERSIONS' app/build.gradle.kts
+          git config user.name "upstream-sync[bot]"
+          git config user.email "upstream-sync@users.noreply.github.com"
+          git add upstream.lock app/build.gradle.kts
+          {
+            echo "upstream: PocketRisu ${LATEST}"
+            echo
+            echo "upstream.lock: ${CURRENT} → ${LATEST}. 패치 적용·번들 빌드 성공 (upstream-sync build 잡에서 검증)."
+            echo
+            echo "릴리스 노트: https://github.com/PocketRisu/PocketRisu/releases/tag/${LATEST}"
+            echo
+            echo "계약 파일 변경 (docs/UPSTREAM-UPDATE.md §2 체크리스트 — 마이너 릴리스면 확인):"
+            cat contract-diff.md
+          } > commit-msg.txt
+          git commit -F commit-msg.txt
+          git push origin HEAD:main
+          gh workflow run ci.yml --ref main
+          echo "dispatched ci.yml for $(git rev-parse --short HEAD)"
+
+      - uses: actions/download-artifact@v4
+        if: steps.tag.outputs.skip == 'false' && needs.build.outputs.build_ok != 'true'
+        with:
+          name: upstream-build-log
+        continue-on-error: true
+
+      - name: Open issue (build or patch failed)
+        if: steps.tag.outputs.skip == 'false' && needs.build.outputs.build_ok != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ steps.tag.outputs.latest }}
+          CURRENT: ${{ steps.tag.outputs.current }}
+        run: |
+          set -euo pipefail
+          TITLE="upstream ${LATEST}: 번들 빌드/패치 실패 — 리베이스 필요"
           if gh issue list --search "\"$TITLE\" in:title" --state open --json number --jq 'length' | grep -qv '^0$'; then
             echo "issue already open"; exit 0
           fi
           {
-            echo "PocketRisu ${{ steps.cmp.outputs.current }} → ${{ steps.cmp.outputs.latest }} 에서 \`scripts/build-frontend.sh\` 가 실패했습니다."
-            echo; echo "릴리스 노트: ${{ steps.cmp.outputs.notes_url }}"
+            echo "PocketRisu ${CURRENT} → ${LATEST} 에서 \`scripts/build-frontend.sh\` 가 실패했습니다."
+            echo; echo "릴리스 노트: https://github.com/PocketRisu/PocketRisu/releases/tag/${LATEST}"
             echo; echo "### 계약 파일 변경"; cat contract-diff.md
-            echo; echo "### 빌드 로그 (끝부분)"; echo '```'; tail -60 build.log; echo '```'
+            echo; echo "### 빌드 로그 (끝부분)"; echo '```'; tail -60 build.log 2>/dev/null || echo "(로그 없음)"; echo '```'
             echo; echo "절차: docs/UPSTREAM-UPDATE.md §3, patches/README.md"
           } > issue.md
           gh issue create --title "$TITLE" --body-file issue.md --label upstream

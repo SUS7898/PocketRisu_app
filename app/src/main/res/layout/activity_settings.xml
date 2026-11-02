@@ -181,6 +181,20 @@
             android:textColor="?android:attr/textColorSecondary"
             android:textSize="12sp" />
 
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/hotfixSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/settings_hotfix" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_hotfix_help"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="12sp" />
+
         <TextView
             android:id="@+id/bundleStatus"
             android:layout_width="match_parent"

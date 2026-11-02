@@ -47,6 +47,8 @@
     <string name="settings_bundle">번들 UI 사용 (서버 버전이 일치할 때만)</string>
     <string name="settings_bundle_help">앱에 내장된 PocketRisu 화면을 씁니다. 서버 버전이 다르거나 두 번 연속 실패하면 자동으로 서버 UI로 돌아갑니다. 바꾼 뒤에는 새로고침하세요.</string>
     <string name="settings_bundle_status">내장 UI: %1$s · 현재 모드: %2$s</string>
+    <string name="settings_hotfix">서버가 핫픽스 버전만 앞서도 내장 UI 유지</string>
+    <string name="settings_hotfix_help">서버 1.16.2 / 내장 UI 1.16.0처럼 마지막 자리만 다르면 내장 UI를 그대로 씁니다. 1.16 → 1.17 같은 변경은 여전히 앱 업데이트가 필요합니다. 문제가 생기면 두 번 실패 후 자동으로 서버 UI로 돌아갑니다.</string>
     <string name="settings_bundle_none">없음 (이 빌드에는 내장 UI가 없음)</string>
     <string name="bundle_fallback_toast">내장 UI 문제로 서버 UI로 전환했습니다 (%1$s)</string>
     <string name="settings_section_keepalive">백그라운드 유지</string>
