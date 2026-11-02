@@ -5,6 +5,11 @@ name: CI
 # "nightly" pre-release, so the newest build is always at
 #   https://github.com/SUS7898/PocketRisu_app/releases/tag/nightly
 # Versioned releases (tags v*) are handled by release.yml and are what the in-app updater follows.
+#
+# Trust boundary (docs/UPSTREAM-UPDATE.md §2c): scripts/build-frontend.sh runs third-party code
+# (upstream's pnpm install + vite build). It runs ONLY in the `bundle` job — read-only token,
+# credentials not persisted, no secrets — and hands over nothing but the built files. Jobs that
+# hold the signing key or a write token never execute upstream code.
 
 on:
   push:
@@ -13,8 +18,7 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -25,12 +29,47 @@ env:
   APP_ID: com.sus7898.pocketrisu
 
 jobs:
-  build:
-    name: Unit tests · Lint · Debug APK
+  bundle:
+    name: Bundled PocketRisu UI (third-party build · no secrets)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.1
+      - name: Build bundled PocketRisu UI (upstream.lock + patches/)
+        run: PNPM=pnpm scripts/build-frontend.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle
+          path: app/src/main/assets/bundle/
+          if-no-files-found: error
+          retention-days: 3
+
+  build:
+    name: Unit tests · Lint · Debug APK
+    needs: bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundle
+          path: app/src/main/assets/bundle
 
       - uses: actions/setup-java@v4
         with:
@@ -43,15 +82,6 @@ jobs:
           accept-android-sdk-licenses: true
 
       - uses: gradle/actions/setup-gradle@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.34.1
-      - name: Build bundled PocketRisu UI (upstream.lock + patches/)
-        run: PNPM=pnpm scripts/build-frontend.sh
 
       - name: Unit tests
         run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest
@@ -88,10 +118,18 @@ jobs:
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: write # move the nightly tag, publish the pre-release
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # git describe needs the tags
+
+      # Built files only; no upstream code runs in this job.
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundle
+          path: app/src/main/assets/bundle
 
       - name: Version from git describe
         id: version
@@ -133,15 +171,6 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.34.1
-      - name: Build bundled PocketRisu UI (upstream.lock + patches/)
-        run: PNPM=pnpm scripts/build-frontend.sh
-
       - name: Decode keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -156,11 +185,14 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
         run: |
           ./gradlew --no-daemon --stacktrace :app:assembleRelease \
-            -PappVersionName="${{ steps.version.outputs.name }}"
+            -PappVersionName="$APP_VERSION_NAME"
 
       - name: Verify signature and package
+        env:
+          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
         run: |
           set -euo pipefail
           APK=app/build/outputs/apk/release/app-release.apk
@@ -169,9 +201,11 @@ jobs:
           grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" apksigner.txt
           "$BT/aapt2" dump badging "$APK" | grep -E "^package:" | tee badging.txt
           grep -q "name='${APP_ID}'" badging.txt
-          grep -q "versionName='${{ steps.version.outputs.name }}'" badging.txt
+          grep -q "versionName='${APP_VERSION_NAME}'" badging.txt
 
       - name: Package
+        env:
+          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -181,9 +215,9 @@ jobs:
           {
             echo "자동 빌드 — main 최신 커밋 ($(git rev-parse --short HEAD))"
             echo
-            echo "- 버전: ${{ steps.version.outputs.name }}"
+            echo "- 버전: ${APP_VERSION_NAME}"
             echo "- 내장 UI: PocketRisu $(tr -d '[:space:]' < upstream.lock) (패치 $(ls patches/*.patch 2>/dev/null | wc -l)개)"
-            echo "- 커밋: ${{ github.sha }}"
+            echo "- 커밋: ${GITHUB_SHA}"
             echo "- 빌드: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo
             echo "테스트용 최신 빌드입니다. 정식 릴리스는 v* 태그 릴리스를 사용하세요."

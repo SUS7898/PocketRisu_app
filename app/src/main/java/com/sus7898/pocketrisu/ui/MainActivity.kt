@@ -471,6 +471,13 @@ class MainActivity : AppCompatActivity() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url
             if (url.host.equals(baseHost, ignoreCase = true)) return false
+            // Only web and mail links leave the app. intent:, market:, tel:, custom app schemes and the
+            // like are dropped: a navigation the page triggers must not be able to launch other apps.
+            val scheme = url.scheme?.lowercase()
+            if (scheme != "http" && scheme != "https" && scheme != "mailto") {
+                AppLog.w(TAG, "blocked navigation to scheme=$scheme")
+                return true
+            }
             // Anything off-server opens in the system browser; the shell stays on PocketRisu.
             AppLog.d(TAG, "external link -> browser host=${url.host}")
             val h = host ?: return true

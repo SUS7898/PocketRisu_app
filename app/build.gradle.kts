@@ -65,8 +65,15 @@ if (!hasReleaseKeystore) {
 // simply never enters bundled mode (BUNDLED_UPSTREAM_VERSION is empty).
 // ---------------------------------------------------------------------------
 val bundleManifest = file("src/main/assets/bundle/BUNDLE.json")
+// BUNDLE.json is produced by a build of third-party code (CI runs it in a separate, unprivileged
+// job — docs/UPSTREAM-UPDATE.md §2c) and the value below is compiled into BuildConfig. Accept only
+// a plain X.Y.Z so nothing else (quotes, " escapes Java resolves before parsing) reaches javac.
 val bundledUpstreamVersion: String = if (bundleManifest.exists()) {
-    Regex("\"upstreamVersion\"\\s*:\\s*\"([^\"]+)\"").find(bundleManifest.readText())?.groupValues?.get(1) ?: ""
+    val raw = Regex("\"upstreamVersion\"\\s*:\\s*\"([^\"]+)\"").find(bundleManifest.readText())?.groupValues?.get(1) ?: ""
+    if (raw.matches(Regex("""\d+\.\d+\.\d+"""))) raw else {
+        if (raw.isNotEmpty()) throw GradleException("BUNDLE.json upstreamVersion is not X.Y.Z: refusing to build")
+        ""
+    }
 } else ""
 if (bundledUpstreamVersion.isEmpty()) {
     logger.warn("[PocketRisuApp] No bundled UI (run scripts/build-frontend.sh) - bundled mode will be unavailable in this build.")

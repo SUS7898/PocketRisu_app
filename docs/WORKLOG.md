@@ -195,7 +195,17 @@
 - **v1.17.0**: 패치 6개 그대로 적용. `/proxy2` 응답 캐시 금지는 앱의 `/api/asset` 캐시와 무관. upstream이 `SafeMutationObserver` 콜백 버그를 고침 — `image_hover_preview` 플러그인의 "콜백 인자를 트리거로만" 우회는 그대로 둬도 무해.
 - 운영은 이제: 핫픽스 → 나스 `pull`만. 마이너 → 다음날 nightly 자동 → 태블릿 알림 탭 1회. 패치 리베이스가 필요할 때만 이슈가 열림.
 
+### 보안 검토 (11/02) — CI 신뢰 경계, 로그 마스킹, 외부 스킴
+- **CI**: `build-frontend.sh`(제3자 코드)가 서명 키·쓰기 토큰과 같은 잡에서 돌던 것을 전부 분리 — `ci.yml`/`release.yml`/`upstream-sync.yml` 모두 권한·시크릿 없는 잡에서만 빌드하고 결과를 artifact로 넘김. 워크플로 기본 `permissions: {}`. 판정 스크립트는 체크리스트 P9.
+- **BUNDLE.json → BuildConfig 주입**: 분리 후에도 artifact의 `upstreamVersion`이 Java 소스로 컴파일되는 유일한 통로였음. `"`로 따옴표를 만들 수 있어 Gradle에서 X.Y.Z만 허용(아니면 빌드 실패).
+- **upstream-sync 태그 주입**: 태그명이 `run:`에 `${{ }}`로 들어가던 것을 정규식 검증 + env로.
+- **Redactor**: 공유되는 진단 로그에서 `sk-…`, `AIza…`, `x-goog-api-key`, 서비스 계정 PEM(잘린 것 포함), bare Bearer, `refresh_token`/`client_secret` 등 접두사 이름을 마스킹. 테스트 3개 추가.
+- **외부 스킴**: WebView 내비게이션이 `intent:`/`market:`/`tel:` 등으로 다른 앱을 띄우지 못하게 http/https/mailto만 허용.
+- 확인하고 문제없던 것: 매니페스트, 브리지 출처 제한, 플러그인 iframe 샌드박스(`allow-same-origin` 없음), 업데이트 SHA-256+서명자 검증, 번들 경로 화이트리스트, 키스토어 커밋 이력 없음.
+- 보류: Actions SHA 고정, DownloadBridge MIME 제한.
+
 ### 미검증 / 다음
+- CI 분리: 다음 main push의 nightly가 `bundle` artifact로 서명 APK를 만드는지(첫 실행).
 - 게이트 완화: 서버 1.17.x 핫픽스가 나왔을 때 `mode=bundled v1.17.0` 유지되는지(로그에 `version mismatch` 없음).
 - 자동화: 다음 upstream 릴리스 다음날 12:17 KST 이후 main에 `upstream: PocketRisu v…` 커밋과 nightly 갱신이 있는지.
 - v1.16.0 번들: `mode=bundled v1.16.0`, 패치 040 로그 `[Storage] JWT re-issued from the session cookie`가 필요할 때만 뜨는지.
