@@ -52,11 +52,15 @@ gh api "repos/PocketRisu/PocketRisu/compare/v1.14.0...v1.15.0" \
 ## 2a. 자동화된 부분 (`upstream-sync.yml`, 매일 12:17 KST)
 
 1. PocketRisu 최신 릴리스 태그가 `upstream.lock`보다 새로우면 그 태그로 `scripts/build-frontend.sh`(패치 적용 + 번들 빌드)를 시도한다.
-2. 성공 → **PR `upstream: PocketRisu vX.Y.Z`** 가 열린다(`upstream.lock`만 변경, 본문에 계약 파일 diff 요약).
-3. 실패 → 이슈 `upstream vX.Y.Z: 번들 빌드/패치 실패 — 리베이스 필요`.
-4. PR은 사람이 §2 체크리스트를 보고 병합한다. 병합되면 nightly가 새 번들로 빌드된다.
+2. 성공 → `upstream.lock`과 `VERIFIED_SERVER_VERSIONS`를 올려 **`main`에 바로 커밋**하고(`upstream: PocketRisu vX.Y.Z`, 본문에 계약 파일 diff 요약), `ci.yml`을 `workflow_dispatch`로 실행해 nightly APK를 만든다. 2026-11-02부터 — 그 전에는 PR을 열었는데, `GITHUB_TOKEN`이 만든 PR·푸시는 다른 워크플로를 트리거하지 못해(GitHub 규칙; 예외는 `workflow_dispatch`뿐) 자동 머지와 nightly가 이어지지 않았고, 저장소 설정상 PR 생성 자체도 막혀 있었다.
+3. 실패 → 이슈 `upstream vX.Y.Z: 번들 빌드/패치 실패 — 리베이스 필요`. 이때만 사람이 patches/를 리베이스한다.
+4. 사람이 할 일: 태블릿에서 업데이트 알림 탭. §2 체크리스트는 **마이너 릴리스**(x.Y.0)에서만 돌려보면 된다 — 핫픽스는 §5 이력상 계약을 건드린 적이 없고, 앱도 핫픽스 차이는 번들 모드를 유지한다(§2b).
 
-번들 버전 ≠ 서버 버전이면 앱이 서버 UI로 자동 폴백하므로, PR을 늦게 병합해도 앱은 멈추지 않는다 — 번들 모드만 꺼진다.
+번들 버전 ≠ 서버 버전이면 앱이 서버 UI로 자동 폴백하므로, nightly가 늦어도 앱은 멈추지 않는다 — 번들 모드만 꺼진다.
+
+## 2b. 버전 게이트 (`UiMode.decide`)
+
+번들 모드는 서버 버전 == 번들 버전일 때 켜진다. 2026-11-02부터 설정 **"서버가 핫픽스 버전만 앞서도 내장 UI 유지"**(기본 켜짐)가 있으면 `major.minor`만 비교한다(`UiMode.sameMinor`): 서버 1.16.2 / 번들 1.16.0은 번들 모드, 1.17.0은 server-ui. 근거는 §5 — 핫픽스(1.15.1, 1.15.2, 1.16.1)가 계약 파일을 바꾼 적이 없음. 잘못 판단해도 2회 연속 실패 시 그 번들 버전을 끄는 폴백이 그대로 작동한다.
 
 ## 3. 앱을 고쳐야 할 때
 
@@ -88,3 +92,5 @@ PocketRisu 릴리스 공지
 | 1.15.1 | 다음 nightly | 없음 — 변경 파일은 `package.json`·`pnpm-lock.yaml`뿐(#104, Termux ARMv8.0용 Vite 8.3.4). 계약 파일 변경 0 | `upstream.lock` v1.15.1, `VERIFIED_SERVER_VERSIONS` 추가. 패치 6개 `git apply --check` 통과 | 2026-10-20 |
 | 1.15.2 | 다음 nightly | 없음 — `src/ts/process/scriptings.ts` 1줄(Lua 엔진 옵션, PR #107) + 테스트 + `package.json`. 계약 파일 변경 0 | `upstream.lock` v1.15.2, `VERIFIED_SERVER_VERSIONS` 추가. 패치 6개 `git apply --check` 통과 | 2026-10-21 |
 | 1.16.0 | 다음 nightly | **있음** — `server.cjs` +449(계정 가져오기·세션 요청 30초 타임아웃·413), `nodeStorage.ts` +189(`authRequest` 래퍼), `parser.svelte.ts`(`risu-form` ADD_ATTR), `ChatBody.svelte`, `stableDiff.ts`, `globalApi.svelte.ts`, `risuSave.ts`(`KV = 12` 예약). C1~C14 대조: 앱이 쓰는 경로·헤더·주입 전역(`__NODE__`, `__PATCH_SYNC__`) 변경 없음. C7: 새 블록 타입 12는 "PocketRisu가 쓰지 않음" 예약 — 디코더 폴백 경로 그대로. `RISU_UPDATE: required` | `upstream.lock` v1.16.0, `VERIFIED_SERVER_VERSIONS` 추가. **패치 010·040 리베이스**(`nodeStorage.ts` 상단 상수 추가, `_doRefreshToken`이 `authRequest`로 바뀜 → 쿠키 재발급도 `authRequest` 경유). 020·030·050·060 그대로 | 2026-10-22 |
+| 1.16.1 | (건너뜀) | 핫픽스. 계약 파일 변경 없음 | 앱 미갱신 — 이때 서버만 올라가 server-ui 폴백으로 운영됨 → §2b 게이트 완화의 계기 | 2026-11-02 |
+| 1.17.0 | 다음 nightly | `server.cjs` +161(Proton Drive 가져오기, `/proxy2` 응답 `Cache-Control: private, no-store`, `/api/session/claim` 추가), `globalApi.svelte.ts` +90, `nodeStorage.ts` +38. C1~C14 대조: 앱이 쓰는 경로·헤더 변경 없음(`/api/asset`의 캐시 헤더는 그대로 — 바뀐 건 `/proxy2`). `SafeMutationObserver` 콜백 버그 수정(플러그인 영향) | `upstream.lock` v1.17.0, `VERIFIED_SERVER_VERSIONS` += 1.16.1, 1.17.0. 패치 6개 그대로 적용. 자동화를 PR → 직접 커밋+dispatch로, 게이트 완화(§2b) | 2026-11-02 |
