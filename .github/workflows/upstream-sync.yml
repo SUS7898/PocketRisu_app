@@ -12,8 +12,8 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
   issues: write
+  actions: write   # gh workflow run ci.yml (nightly) after the lock bump
 
 jobs:
   sync:
@@ -68,24 +68,43 @@ jobs:
           PNPM=pnpm scripts/build-frontend.sh 2>&1 | tee build.log
           rm -rf app/src/main/assets/bundle
 
-      - name: Open pull request (build succeeded)
+      # Patches applied and the bundle built from the new tag, so the lock can move without a
+      # human in the loop (docs/UPSTREAM-UPDATE.md §2a). This commits straight to main with
+      # GITHUB_TOKEN; pushes made with that token do not trigger workflows (GitHub rule), so the
+      # nightly build is started explicitly via workflow_dispatch — the one event the rule exempts.
+      # No PAT, no repository-setting change, no PR to merge.
+      - name: Commit the lock bump to main and build the nightly (build succeeded)
         if: steps.cmp.outputs.changed == 'true' && steps.build.outcome == 'success'
-        uses: peter-evans/create-pull-request@v7
-        with:
-          branch: upstream/${{ steps.cmp.outputs.latest }}
-          title: "upstream: PocketRisu ${{ steps.cmp.outputs.latest }}"
-          commit-message: "upstream.lock: ${{ steps.cmp.outputs.current }} → ${{ steps.cmp.outputs.latest }}"
-          add-paths: upstream.lock
-          body: |
-            PocketRisu ${{ steps.cmp.outputs.current }} → **${{ steps.cmp.outputs.latest }}** — 패치 적용·번들 빌드 성공.
-
-            릴리스 노트: ${{ steps.cmp.outputs.notes_url }}
-
-            ### 계약 파일 변경 (docs/UPSTREAM-UPDATE.md §2 체크리스트로 대조할 것)
-            ${{ steps.cmp.outputs.contract_diff }}
-
-            병합 전: 체크리스트 C1~C14 확인 → `VERIFIED_SERVER_VERSIONS` 갱신 → 실기기 로그 확인.
-            병합 후: nightly가 새 번들로 빌드됨 → 앱 업데이트 → NAS `docker compose pull`.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ steps.cmp.outputs.latest }}
+          CURRENT: ${{ steps.cmp.outputs.current }}
+        run: |
+          set -euo pipefail
+          VER="${LATEST#v}"
+          # VERIFIED_SERVER_VERSIONS = "a, b, c" → append the new version unless already listed.
+          if ! grep -q "\"[^\"]*\b${VER//./\\.}\b[^\"]*\"" <(grep 'VERIFIED_SERVER_VERSIONS' app/build.gradle.kts); then
+            sed -i -E "s/(\"VERIFIED_SERVER_VERSIONS\", \"\\\\\")([^\\\\]*)(\\\\\"\")/\1\2, ${VER}\3/" app/build.gradle.kts
+          fi
+          grep 'VERIFIED_SERVER_VERSIONS' app/build.gradle.kts
+          git config user.name "upstream-sync[bot]"
+          git config user.email "upstream-sync@users.noreply.github.com"
+          git add upstream.lock app/build.gradle.kts
+          {
+            echo "upstream: PocketRisu ${LATEST}"
+            echo
+            echo "upstream.lock: ${CURRENT} → ${LATEST}. 패치 적용·번들 빌드 성공 (이 워크플로에서 검증)."
+            echo
+            echo "릴리스 노트: ${{ steps.cmp.outputs.notes_url }}"
+            echo
+            echo "계약 파일 변경 (docs/UPSTREAM-UPDATE.md §2 체크리스트 — 마이너 릴리스면 확인):"
+            cat contract-diff.md
+          } > commit-msg.txt
+          git commit -F commit-msg.txt
+          git push origin HEAD:main
+          # Build + publish the nightly APK from the commit we just pushed.
+          gh workflow run ci.yml --ref main
+          echo "dispatched ci.yml for $(git rev-parse --short HEAD)"
 
       - name: Open issue (build or patch failed)
         if: steps.cmp.outputs.changed == 'true' && steps.build.outcome != 'success'
