@@ -58,6 +58,13 @@ gh api "repos/PocketRisu/PocketRisu/compare/v1.14.0...v1.15.0" \
 
 번들 버전 ≠ 서버 버전이면 앱이 서버 UI로 자동 폴백하므로, nightly가 늦어도 앱은 멈추지 않는다 — 번들 모드만 꺼진다.
 
+## 2c. CI 신뢰 경계 (2026-11-02 보안 검토)
+
+`scripts/build-frontend.sh`는 **제3자 코드를 실행한다** — upstream의 `pnpm install`(허용된 빌드 스크립트)과 `vite build`(upstream의 vite 설정·플러그인). upstream 저장소나 그 빌드 의존성이 오염되면 그 코드가 CI 러너에서 돈다. 같은 잡 안의 백그라운드 프로세스는 이후 스텝까지 살아남고, `/proc/<pid>/environ`과 `$RUNNER_TEMP`, 체크아웃이 남긴 `.git/config` 토큰을 읽을 수 있다.
+
+- `upstream-sync.yml`: **분리됨.** `build` 잡(읽기 전용 토큰, `persist-credentials: false`, 시크릿 없음)이 빌드만 하고, `publish` 잡(쓰기 권한)은 upstream 코드를 실행하지 않으며 태그를 API에서 다시 받아 `^v\d+\.\d+\.\d+$`로 검증한다. 태그명은 env로만 넘기고 `run:` 안에 `${{ }}`로 넣지 않는다(태그명에 `$(…)`가 들어갈 수 있다 — git 참조 규칙이 `$ ( ) ;`를 허용).
+- `ci.yml` nightly / `release.yml`: **미분리.** 번들 빌드와 서명이 같은 잡에 있다 → 빌드 단계가 남긴 프로세스가 이후 스텝의 서명 키(`$RUNNER_TEMP/release.jks`)·비밀번호(환경변수)를 읽을 수 있다. 서명 키가 새면 앱의 자체 업데이트 서명자 검증을 통과하는 APK를 만들 수 있다. 해결: 번들을 별도 잡(권한·시크릿 없음)에서 빌드해 artifact로 넘기고, 서명 잡은 upstream 코드를 실행하지 않는다.
+
 ## 2b. 버전 게이트 (`UiMode.decide`)
 
 번들 모드는 서버 버전 == 번들 버전일 때 켜진다. 2026-11-02부터 설정 **"서버가 핫픽스 버전만 앞서도 내장 UI 유지"**(기본 켜짐)가 있으면 `major.minor`만 비교한다(`UiMode.sameMinor`): 서버 1.16.2 / 번들 1.16.0은 번들 모드, 1.17.0은 server-ui. 근거는 §5 — 핫픽스(1.15.1, 1.15.2, 1.16.1)가 계약 파일을 바꾼 적이 없음. 잘못 판단해도 2회 연속 실패 시 그 번들 버전을 끄는 폴백이 그대로 작동한다.
