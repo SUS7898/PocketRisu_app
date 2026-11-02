@@ -72,6 +72,11 @@ class SettingsActivity : AppCompatActivity() {
             AppLog.i("Bundle", "setting bundleEnabled=$checked")
             renderBundle()
         }
+        binding.hotfixSwitch.isChecked = settings.allowHotfixMismatch
+        binding.hotfixSwitch.setOnCheckedChangeListener { _, checked ->
+            settings.allowHotfixMismatch = checked
+            AppLog.i("Bundle", "setting allowHotfixMismatch=$checked")
+        }
         binding.checkButton.setOnClickListener { check() }
         binding.installButton.setOnClickListener { found?.let { downloadAndInstall(it) } }
         binding.releaseLink.setOnClickListener {

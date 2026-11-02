@@ -65,6 +65,11 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(KEY_BUNDLE_ENABLED, true)
         set(value) = prefs.edit { putBoolean(KEY_BUNDLE_ENABLED, value) }
 
+    /** Run the bundled UI when the server is only a hotfix (x.y.Z) ahead of it (UiMode.sameMinor). Default on. */
+    var allowHotfixMismatch: Boolean
+        get() = prefs.getBoolean(KEY_ALLOW_HOTFIX_MISMATCH, true)
+        set(value) = prefs.edit { putBoolean(KEY_ALLOW_HOTFIX_MISMATCH, value) }
+
     /** Bundle version switched off after two consecutive runtime failures; cleared when a bundle works. */
     var bundleDisabledForVersion: String?
         get() = prefs.getString(KEY_BUNDLE_DISABLED_FOR, null)
@@ -103,6 +108,7 @@ class AppSettings(context: Context) {
         private const val KEY_KEEP_ALIVE = "keepAlive"
         private const val KEY_BUNDLE_ENABLED = "bundleEnabled"
         private const val KEY_HIDE_IME_HW_KEYBOARD = "hideImeWithHardwareKeyboard"
+        private const val KEY_ALLOW_HOTFIX_MISMATCH = "allowHotfixMismatch"
         private const val KEY_BUNDLE_DISABLED_FOR = "bundleDisabledForVersion"
         private const val KEY_BUNDLE_FAILS = "bundleFailures"
         const val BUNDLE_MAX_FAILURES = 2
