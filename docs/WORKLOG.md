@@ -204,7 +204,14 @@
 - 확인하고 문제없던 것: 매니페스트, 브리지 출처 제한, 플러그인 iframe 샌드박스(`allow-same-origin` 없음), 업데이트 SHA-256+서명자 검증, 번들 경로 화이트리스트, 키스토어 커밋 이력 없음.
 - 보류: Actions SHA 고정, DownloadBridge MIME 제한.
 
+### 하드웨어 키보드 전송 키 (11/08) — 패치 070
+- 사용자 요청: 앱에서 Enter는 줄바꿈이고 Ctrl+Enter로 전송 **또는 진행 중인 생성 취소**. upstream은 이미 모바일 기본 전송 키가 Ctrl+Enter(`sendKeyMobile ??= 'ctrl-enter'`, 설정 → 접근성 → 메시지 보내기 키 (모바일)에서 변경 가능). 생성 중 전송 키는 "아직 생성 중" 토스트만 띄웠음 — 화면의 그 자리 버튼은 Stop인데 키보드만 멈출 방법이 없었다.
+- `patches/070-send-key-stops-generation.patch` (`DefaultChatScreen.svelte`만): 전송 키 → `sendKeyPressed(e)` — 현재 채팅이 생성 중이면 `abortChat()`(Stop 버튼과 같은 호출), 아니면 `send()`. 키 자동 반복(`e.repeat`)은 무시 — 누르고 있으면 전송 직후 반복 입력이 방금 시작한 생성을 멈추므로. 번역 입력창도 같은 경로. **전체화면 작성기**(Maximize)에는 전송 키 핸들러 자체가 없었음 → 같은 키로 `sendFullscreen`.
+- 앱(Kotlin)이 아니라 번들 UI 패치로 한 이유: 키 이벤트는 WebView 안의 textarea가 받고, 생성 상태(`generationStates`)도 페이지 안에 있다. 네이티브에서 가로채 JS를 주입하면 upstream 내부 식별자에 의존해 더 깨지기 쉽다. 단점: 서버 UI 폴백 모드에서는 적용되지 않음(다른 패치와 동일).
+- 검토(P5 다수결): 전송 키를 처리하는 곳 4곳 — 인라인·번역 입력창(수정), 전체화면 작성기(핸들러 없음 → 수정), 핫키 `send`(Ctrl+Alt+Enter, `.button-icon-send` 클릭 — 생성 중엔 그 버튼이 없어 무동작, 보류). 부수 발견: 입력창에서 Ctrl+M은 `reroll()`과 전역 핫키 `modelSelect`가 **둘 다** 실행됨(textarea가 `stopPropagation`을 안 함) — upstream 버그, 미수정.
+
 ### 미검증 / 다음
+- 패치 070: 태블릿에서 Ctrl+Enter로 보낸 뒤 생성 중 Ctrl+Enter 한 번 더 → Stop 버튼을 누른 것처럼 멈추는지. 전체화면 작성기에서 Ctrl+Enter 전송. 한글 조합 중이면 첫 Enter가 조합 확정에 쓰이는 건 IME 동작(PC와 동일).
 - CI 분리: 다음 main push의 nightly가 `bundle` artifact로 서명 APK를 만드는지(첫 실행).
 - 게이트 완화: 서버 1.17.x 핫픽스가 나왔을 때 `mode=bundled v1.17.0` 유지되는지(로그에 `version mismatch` 없음).
 - 자동화: 다음 upstream 릴리스 다음날 12:17 KST 이후 main에 `upstream: PocketRisu v…` 커밋과 nightly 갱신이 있는지.

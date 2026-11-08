@@ -1,0 +1,56 @@
+diff --git a/src/lib/ChatScreens/DefaultChatScreen.svelte b/src/lib/ChatScreens/DefaultChatScreen.svelte
+index 4adf694..8aadbfa 100644
+--- a/src/lib/ChatScreens/DefaultChatScreen.svelte
++++ b/src/lib/ChatScreens/DefaultChatScreen.svelte
+@@ -694,6 +694,19 @@ import { isMobile } from 'src/ts/platform'
+         stopGeneration(currentChatGenKey(), { onForceReleased: onGenerationForceReleased })
+     }
+ 
++    // Keyboard twin of the send/stop button. While this chat is generating the
++    // button in that spot is Stop, so the configured send key stops too instead
++    // of toasting "still generating" — on a hardware keyboard that is the only
++    // way to cancel without reaching for the screen. Auto-repeat is ignored: a
++    // held send key fires send, and its repeats would stop what it just started.
++    function sendKeyPressed(e: KeyboardEvent, doSend: () => void = send){
++        if(currentChatGenerating){
++            if(!e.repeat) abortChat()
++            return
++        }
++        doSend()
++    }
++
+     // Stop was pressed but the generation never wound down (#85): its entry
+     // was dropped so sending works again. The stuck send is over for the
+     // user, so its resumable tombstone goes too.
+@@ -1169,7 +1182,7 @@ import { isMobile } from 'src/ts/platform'
+                           onkeydown={(e) => {
+                         if(e.key.toLocaleLowerCase() === "enter" && !e.isComposing){
+                             if(shouldSendOnEnter(e)){
+-                                send()
++                                sendKeyPressed(e)
+                                 e.preventDefault()
+                             }
+                         }
+@@ -1265,7 +1278,7 @@ import { isMobile } from 'src/ts/platform'
+                               onkeydown={(e) => {
+                             if(e.key.toLocaleLowerCase() === "enter" && !e.isComposing){
+                                 if(shouldSendOnEnter(e)){
+-                                    send()
++                                    sendKeyPressed(e)
+                                     e.preventDefault()
+                                 }
+                             }
+@@ -1501,6 +1514,13 @@ import { isMobile } from 'src/ts/platform'
+                     bind:value={messageInput}
+                     bind:this={fullscreenEle}
+                     onblur={persistDraftNow}
++                    onkeydown={(e) => {
++                        // Same send key as the inline composer; it had none here.
++                        if(e.key.toLocaleLowerCase() === "enter" && !e.isComposing && shouldSendOnEnter(e)){
++                            sendKeyPressed(e, sendFullscreen)
++                            e.preventDefault()
++                        }
++                    }}
+                     placeholder={language.enterMessageToPersona(activePersonaName)}
+                     class="flex-1 min-h-0 w-full resize-none rounded-md border border-darkborderc bg-transparent p-3 text-textcolor text-base outline-hidden overflow-y-auto focus:border-textcolor transition-colors"
+             ></textarea>
