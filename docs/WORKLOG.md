@@ -219,7 +219,15 @@
 - 패치 070 개정: `sendKeyPressed` → `sendKeyDown(e, doSend)`로 Enter 판정·isComposing·preventDefault까지 한 곳에 모음(인라인·번역·전체화면 3곳이 한 줄 호출). 자동 반복 가드는 `e.repeat` 대신 **키로 보낸 뒤 1초 시간창**. 생성 중 Enter 계열 keydown(key=enter·keyCode 13·229)마다 `console.warn('[SendKey] keydown while generating key=… ctrl=… composing=… keyCode=… sendKey=…')`(300ms 스로틀), 중단 호출 시 `[SendKey] stop`, 가드에 걸리면 `[SendKey] stop ignored`. 앱은 `[`로 시작하는 console warning을 `W/Shell console[warning]: …`로 진단 로그에 남긴다(MainActivity.onConsoleMessage).
 - 교훈: `patches/README.md` 경고 그대로 — `git apply --3way`가 성공하면 결과가 인덱스에 올라가므로 패치 재생성은 `git diff HEAD -- <file>`로 해야 한다(첫 재생성이 옛 070 기준 diff가 되어 깨끗한 체크아웃에서 실패했음).
 
+### 실기기 (11/08, dev.40 · Rii i4+ 블루투스 키보드) — 평상시 Ctrl+Enter 전송도 안 됨 → 키 경로 계측 2차
+- PR #8(dev.40) 설치 뒤 사용자 보고: 생성 중이 아니라도 Rii i4+에서 Ctrl+Enter 전송이 안 된다. 로그(15:48~15:52): 키보드 연결 뒤 `drafts/` 쓰기는 이어지므로 글자 입력은 되고, 3분간 새 메시지 저장(`chat-content save idx=N`)이 없다가 15:52:22에야 전송됨(화면 버튼 추정). `[SendKey]` 줄 없음 — dev.40 계측은 생성 중에만 찍혔으므로 당연.
+- 가설: Samsung 키보드(IME)가 물리 키보드의 Enter를 가로채 (a) `sendDownUpKeyEvents`로 재전송하며 **수식키를 버리거나**(metaState 0 → 페이지엔 Ctrl 없는 Enter → 줄바꿈), (b) `commitText("\n")`로 넣어 키 이벤트 없이 input만 발생, (c) Rii i4+의 Ctrl이 META_CTRL을 안 세움. 셋 다 페이지 쪽만으론 구분 불가.
+- 계측 2차: ① 네이티브 `KeyLogWebView`(WebView 서브클래스) — `dispatchKeyEventPreIme`(IME 전 원시 이벤트)·`dispatchKeyEvent`(IME 통과 후)에서 Enter 계열과 Ctrl 눌린 키의 down만 `I/Key preIme|postIme KEYCODE_… ctrl= shift= alt= repeat= metaState= source= device=`로 기록. ② 패치 070 — `[SendKey] keydown generating=… key= code= keyCode= ctrl= … sendKey=`을 생성 중 아닐 때도 기록(Enter 계열은 항상, keyCode 229는 Ctrl 동반 또는 생성 중일 때만, 300ms 스로틀), 세 입력창에 `onbeforeinput`을 달아 `insertLineBreak`/`insertParagraph`/`\n` 삽입을 `[SendKey] beforeinput …`으로 기록.
+- 판독표: preIme에 `ctrl=true`가 있고 postIme에 없으면 (a) IME가 수식키를 버림 → 네이티브 PreIme에서 Ctrl+Enter를 잡아 페이지에 합성 keydown을 넣는 수정으로 간다. preIme부터 `ctrl=false`면 (c) 키보드 문제 → 전송 키를 Enter로 바꾸는 설정 안내. postIme엔 있는데 `[SendKey] keydown`이 없고 `beforeinput`만 있으면 (b).
+- 별건: 15:00:36·15:52:33 `[ModelPreset] stream error / request failed` — 모델 요청 실패. 전송 키와 무관하며 서버·프리셋 쪽 확인 필요.
+
 ### 미검증 / 다음
+- 계측 2차(다음 nightly): Rii i4+로 입력창에서 Enter, Ctrl+Enter를 각각 누른 뒤 로그 저장 → `I/Key preIme/postIme` 줄과 `[SendKey] keydown/beforeinput` 줄로 위 판독표 적용.
 - 패치 070(개정): 다음 nightly에서 생성 중 Ctrl+Enter → 멈추는지. 안 멈추면 진단 로그의 `console[warning]: [SendKey] keydown while generating …` 줄(ctrl·composing·keyCode 값)과 `[SendKey] stop` 유무로 분기 — 줄 자체가 없으면 keydown이 입력창에 안 닿는 것. 같은 때 화면 Stop 버튼도 눌러 멈추는지 함께 확인. 기존 항목: 태블릿에서 Ctrl+Enter로 보낸 뒤 생성 중 Ctrl+Enter 한 번 더 → Stop 버튼을 누른 것처럼 멈추는지. 전체화면 작성기에서 Ctrl+Enter 전송. 한글 조합 중이면 첫 Enter가 조합 확정에 쓰이는 건 IME 동작(PC와 동일).
 - CI 분리: 다음 main push의 nightly가 `bundle` artifact로 서명 APK를 만드는지(첫 실행).
 - 게이트 완화: 서버 1.17.x 핫픽스가 나왔을 때 `mode=bundled v1.17.0` 유지되는지(로그에 `version mismatch` 없음).
