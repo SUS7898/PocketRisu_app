@@ -1,56 +1,96 @@
 diff --git a/src/lib/ChatScreens/DefaultChatScreen.svelte b/src/lib/ChatScreens/DefaultChatScreen.svelte
-index 4adf694..8aadbfa 100644
+index 4adf694..e652871 100644
 --- a/src/lib/ChatScreens/DefaultChatScreen.svelte
 +++ b/src/lib/ChatScreens/DefaultChatScreen.svelte
-@@ -694,6 +694,19 @@ import { isMobile } from 'src/ts/platform'
+@@ -694,6 +694,55 @@ import { isMobile } from 'src/ts/platform'
          stopGeneration(currentChatGenKey(), { onForceReleased: onGenerationForceReleased })
      }
  
 +    // Keyboard twin of the send/stop button. While this chat is generating the
 +    // button in that spot is Stop, so the configured send key stops too instead
 +    // of toasting "still generating" — on a hardware keyboard that is the only
-+    // way to cancel without reaching for the screen. Auto-repeat is ignored: a
-+    // held send key fires send, and its repeats would stop what it just started.
-+    function sendKeyPressed(e: KeyboardEvent, doSend: () => void = send){
-+        if(currentChatGenerating){
-+            if(!e.repeat) abortChat()
++    // way to cancel without reaching for the screen.
++    //
++    // A held send key fires send and then auto-repeats, and those repeats would
++    // stop what the press just started. The guard is a time window after the
++    // key-triggered send, not e.repeat: Android WebView never sets the
++    // auto-repeat flag (ImeAdapter passes only the meta state), so on a
++    // hardware keyboard every repeat would read as a fresh press.
++    //
++    // "[SendKey]" warnings are kept by the PocketRisu app's diagnostic log
++    // (console warnings starting with "["). While this chat is generating,
++    // every Enter-like keydown on the composer is reported with the fields the
++    // send-key decision depends on, so a key that arrives changed by the IME
++    // (no Ctrl, composing, keyCode 229) is visible in the log.
++    const SEND_KEY_STOP_GUARD_MS = 1000
++    let lastSendKeyAt = 0
++    let lastSendKeyLogAt = 0
++    function sendKeyDown(e: KeyboardEvent, doSend: () => void = send){
++        if(currentChatGenerating && (e.key.toLocaleLowerCase() === "enter" || e.keyCode === 13 || e.keyCode === 229)){
++            const now = Date.now()
++            if(now - lastSendKeyLogAt > 300){
++                lastSendKeyLogAt = now
++                const mode = isMobile ? DBState.db.sendKeyMobile : DBState.db.sendKeyPC
++                console.warn(`[SendKey] keydown while generating key=${e.key} code=${e.code} keyCode=${e.keyCode} ctrl=${e.ctrlKey} meta=${e.metaKey} shift=${e.shiftKey} alt=${e.altKey} composing=${e.isComposing} repeat=${e.repeat} sendKey=${mode} mobile=${isMobile}`)
++            }
++        }
++        if(e.key.toLocaleLowerCase() !== "enter" || !shouldSendOnEnter(e)) return
++        if(e.isComposing){
++            // The IME takes this Enter to commit its composition (upstream behaviour).
++            if(currentChatGenerating) console.warn('[SendKey] stop ignored: IME composing')
 +            return
 +        }
++        e.preventDefault()
++        if(currentChatGenerating){
++            const sinceSend = Date.now() - lastSendKeyAt
++            if(sinceSend < SEND_KEY_STOP_GUARD_MS){
++                console.warn(`[SendKey] stop ignored ${sinceSend}ms after send (repeat=${e.repeat})`)
++                return
++            }
++            console.warn(`[SendKey] stop (repeat=${e.repeat})`)
++            abortChat()
++            return
++        }
++        lastSendKeyAt = Date.now()
 +        doSend()
 +    }
 +
      // Stop was pressed but the generation never wound down (#85): its entry
      // was dropped so sending works again. The stuck send is over for the
      // user, so its resumable tombstone goes too.
-@@ -1169,7 +1182,7 @@ import { isMobile } from 'src/ts/platform'
+@@ -1167,12 +1216,7 @@ import { isMobile } from 'src/ts/platform'
+                           bind:value={messageInput}
+                           bind:this={inputEle}
                            onkeydown={(e) => {
-                         if(e.key.toLocaleLowerCase() === "enter" && !e.isComposing){
-                             if(shouldSendOnEnter(e)){
+-                        if(e.key.toLocaleLowerCase() === "enter" && !e.isComposing){
+-                            if(shouldSendOnEnter(e)){
 -                                send()
-+                                sendKeyPressed(e)
-                                 e.preventDefault()
-                             }
-                         }
-@@ -1265,7 +1278,7 @@ import { isMobile } from 'src/ts/platform'
+-                                e.preventDefault()
+-                            }
+-                        }
++                        sendKeyDown(e)
+                         if(e.key.toLocaleLowerCase() === "m" && (e.ctrlKey)){
+                             reroll()
+                             e.preventDefault()
+@@ -1263,12 +1307,7 @@ import { isMobile } from 'src/ts/platform'
+                               bind:value={messageInputTranslate}
+                               bind:this={inputTranslateEle}
                                onkeydown={(e) => {
-                             if(e.key.toLocaleLowerCase() === "enter" && !e.isComposing){
-                                 if(shouldSendOnEnter(e)){
+-                            if(e.key.toLocaleLowerCase() === "enter" && !e.isComposing){
+-                                if(shouldSendOnEnter(e)){
 -                                    send()
-+                                    sendKeyPressed(e)
-                                     e.preventDefault()
-                                 }
-                             }
-@@ -1501,6 +1514,13 @@ import { isMobile } from 'src/ts/platform'
+-                                    e.preventDefault()
+-                                }
+-                            }
++                            sendKeyDown(e)
+                             if(e.key.toLocaleLowerCase() === "m" && (e.ctrlKey)){
+                                 reroll()
+                                 e.preventDefault()
+@@ -1501,6 +1540,7 @@ import { isMobile } from 'src/ts/platform'
                      bind:value={messageInput}
                      bind:this={fullscreenEle}
                      onblur={persistDraftNow}
-+                    onkeydown={(e) => {
-+                        // Same send key as the inline composer; it had none here.
-+                        if(e.key.toLocaleLowerCase() === "enter" && !e.isComposing && shouldSendOnEnter(e)){
-+                            sendKeyPressed(e, sendFullscreen)
-+                            e.preventDefault()
-+                        }
-+                    }}
++                    onkeydown={(e) => sendKeyDown(e, sendFullscreen)}
                      placeholder={language.enterMessageToPersona(activePersonaName)}
                      class="flex-1 min-h-0 w-full resize-none rounded-md border border-darkborderc bg-transparent p-3 text-textcolor text-base outline-hidden overflow-y-auto focus:border-textcolor transition-colors"
              ></textarea>

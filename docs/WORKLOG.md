@@ -210,8 +210,17 @@
 - 앱(Kotlin)이 아니라 번들 UI 패치로 한 이유: 키 이벤트는 WebView 안의 textarea가 받고, 생성 상태(`generationStates`)도 페이지 안에 있다. 네이티브에서 가로채 JS를 주입하면 upstream 내부 식별자에 의존해 더 깨지기 쉽다. 단점: 서버 UI 폴백 모드에서는 적용되지 않음(다른 패치와 동일).
 - 검토(P5 다수결): 전송 키를 처리하는 곳 4곳 — 인라인·번역 입력창(수정), 전체화면 작성기(핸들러 없음 → 수정), 핫키 `send`(Ctrl+Alt+Enter, `.button-icon-send` 클릭 — 생성 중엔 그 버튼이 없어 무동작, 보류). 부수 발견: 입력창에서 Ctrl+M은 `reroll()`과 전역 핫키 `modelSelect`가 **둘 다** 실행됨(textarea가 `stopPropagation`을 안 함) — upstream 버그, 미수정.
 
+### 실기기 (11/08, dev.38 · SM-S948N · WebView 156) — 패치 070 1차: 생성 중 Ctrl+Enter 무반응
+- 로그: `mode=bundled v1.17.0 patchSync=true`, `Bundle healthy`, `ime hidden: hardware keyboard attached` — 패치가 실린 UI가 맞다. nightly APK를 받아 확인: `BUNDLE.json patches=7`, 압축 청크에 `F(Ve)?e.repeat||We():t()`(= sendKeyPressed)와 keydown 3곳이 들어 있다.
+- 증상(사용자): 평소 Ctrl+Enter 전송은 됨. 생성 중엔 Stop 버튼이 보이고 입력창 포커스도 남아 있는데 Ctrl+Enter에 아무 반응 없음(줄바꿈·토스트 없음).
+- 압축 청크 대조: 키 경로와 Stop 버튼이 같은 상태(`Ve = derived(() => generationStates.has(key))`)와 같은 함수(`We` = stopGeneration)를 쓴다. 두 경로가 공유하지 않는 입력은 `e.repeat` 하나.
+- Chromium 소스(`content/.../ImeAdapterImpl.java` `getModifiers`, `components/input/web_input_event_builders_android.cc`): Android는 키 이벤트에 Shift/Alt/Ctrl/CapsLock/NumLock 메타 상태만 넘기고 **자동 반복 플래그를 아예 넣지 않는다** → Android WebView에서 `e.repeat`는 항상 false. 따라서 "repeat 오보" 가설은 기각. 역으로 옛 코드는 Android에서 키를 꾹 누르면 반복 입력이 전부 새 눌림으로 읽혀 방금 보낸 생성을 멈추는 문제가 있었다.
+- 남은 후보: 생성 중엔 keydown이 핸들러에 안 닿거나(IME가 Ctrl 없는 Enter로 바꿔 보냄·performEditorAction·keyCode 229), `isComposing=true`로 걸러짐. 코드만으로는 더 좁힐 수 없어 계측을 넣는다.
+- 패치 070 개정: `sendKeyPressed` → `sendKeyDown(e, doSend)`로 Enter 판정·isComposing·preventDefault까지 한 곳에 모음(인라인·번역·전체화면 3곳이 한 줄 호출). 자동 반복 가드는 `e.repeat` 대신 **키로 보낸 뒤 1초 시간창**. 생성 중 Enter 계열 keydown(key=enter·keyCode 13·229)마다 `console.warn('[SendKey] keydown while generating key=… ctrl=… composing=… keyCode=… sendKey=…')`(300ms 스로틀), 중단 호출 시 `[SendKey] stop`, 가드에 걸리면 `[SendKey] stop ignored`. 앱은 `[`로 시작하는 console warning을 `W/Shell console[warning]: …`로 진단 로그에 남긴다(MainActivity.onConsoleMessage).
+- 교훈: `patches/README.md` 경고 그대로 — `git apply --3way`가 성공하면 결과가 인덱스에 올라가므로 패치 재생성은 `git diff HEAD -- <file>`로 해야 한다(첫 재생성이 옛 070 기준 diff가 되어 깨끗한 체크아웃에서 실패했음).
+
 ### 미검증 / 다음
-- 패치 070: 태블릿에서 Ctrl+Enter로 보낸 뒤 생성 중 Ctrl+Enter 한 번 더 → Stop 버튼을 누른 것처럼 멈추는지. 전체화면 작성기에서 Ctrl+Enter 전송. 한글 조합 중이면 첫 Enter가 조합 확정에 쓰이는 건 IME 동작(PC와 동일).
+- 패치 070(개정): 다음 nightly에서 생성 중 Ctrl+Enter → 멈추는지. 안 멈추면 진단 로그의 `console[warning]: [SendKey] keydown while generating …` 줄(ctrl·composing·keyCode 값)과 `[SendKey] stop` 유무로 분기 — 줄 자체가 없으면 keydown이 입력창에 안 닿는 것. 같은 때 화면 Stop 버튼도 눌러 멈추는지 함께 확인. 기존 항목: 태블릿에서 Ctrl+Enter로 보낸 뒤 생성 중 Ctrl+Enter 한 번 더 → Stop 버튼을 누른 것처럼 멈추는지. 전체화면 작성기에서 Ctrl+Enter 전송. 한글 조합 중이면 첫 Enter가 조합 확정에 쓰이는 건 IME 동작(PC와 동일).
 - CI 분리: 다음 main push의 nightly가 `bundle` artifact로 서명 APK를 만드는지(첫 실행).
 - 게이트 완화: 서버 1.17.x 핫픽스가 나왔을 때 `mode=bundled v1.17.0` 유지되는지(로그에 `version mismatch` 없음).
 - 자동화: 다음 upstream 릴리스 다음날 12:17 KST 이후 main에 `upstream: PocketRisu v…` 커밋과 nightly 갱신이 있는지.
