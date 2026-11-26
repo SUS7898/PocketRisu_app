@@ -513,6 +513,22 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(h, h.getString(R.string.page_error, error.description), Toast.LENGTH_LONG).show()
         }
 
+        /**
+         * A failed API sub-request (401 after a session expired, 404 for a missing inlay, 5xx while
+         * the server is busy) is otherwise invisible: images just stay blank. Fetch/XHR calls are
+         * reported here as well as <img> loads. Path only — the query string can carry tokens.
+         */
+        override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+            val path = request.url.encodedPath ?: return
+            if (!path.startsWith("/api/") || !request.url.host.equals(baseHost, ignoreCase = true)) return
+            val what = if (path.startsWith("/api/asset/")) {
+                "asset " + RequestObserver.shortKey(RequestObserver.decodeHexKey(path.removePrefix("/api/asset/")))
+            } else {
+                path.take(48)
+            }
+            AppLog.w("Intercept", "http ${errorResponse.statusCode} ${request.method} $what")
+        }
+
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
             val h = host
             if (h == null) {

@@ -226,7 +226,20 @@
 - 판독표: preIme에 `ctrl=true`가 있고 postIme에 없으면 (a) IME가 수식키를 버림 → 네이티브 PreIme에서 Ctrl+Enter를 잡아 페이지에 합성 keydown을 넣는 수정으로 간다. preIme부터 `ctrl=false`면 (c) 키보드 문제 → 전송 키를 Enter로 바꾸는 설정 안내. postIme엔 있는데 `[SendKey] keydown`이 없고 `beforeinput`만 있으면 (b).
 - 별건: 15:00:36·15:52:33 `[ModelPreset] stream error / request failed` — 모델 요청 실패. 전송 키와 무관하며 서버·프리셋 쪽 확인 필요.
 
+### upstream v1.18.0 반영 + 최적화 (11/26)
+- PocketRisu v1.18.0(11/26 08:49 UTC, 데이터 유실 방지 11건·자동 저장 응답 기한). upstream-sync를 수동 실행 → 봇이 `upstream.lock`·`VERIFIED_SERVER_VERSIONS` 갱신(388e952) → nightly.
+- 계약 대조(UPSTREAM-UPDATE §5 1.18.0 행): 앱이 쓰는 경로·헤더·주입 전역 변화 없음, 패치 010~070 그대로 적용.
+- 주의: v1.18의 자동 저장 응답 기한은 120초(+업로드 여유). NAS 백업 복사 정지(T-18, 약 160초)와 겹치면 저장 요청이 기한을 넘겨 재시도된다(upstream이 충돌 안전하게 처리). `POCKETRISU_BACKUP_INTERVAL_MS`를 늘려 두면 겹칠 일이 거의 없다.
+- 최적화: 패치 050 보강(T-22), 번들에 없는 `.map` 즉시 404(T-23), 인레이 요청 I 레벨·`/api` HTTP 오류 W 로그(T-22).
+
+| 명령 | 결과 |
+|---|---|
+| `git apply --check patches/*.patch` (v1.18.0) | 7개 모두 적용 |
+| `UPSTREAM_DIR=<scratch> PNPM=pnpm bash scripts/build-frontend.sh` | patches applied: 7, bundle 245 files 72,079KB, `upstreamVersion 1.18.0` |
+| `.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug` | BUILD SUCCESSFUL, `bundled UI upstream v1.18.0` |
+
 ### 미검증 / 다음
+- v1.18.0 nightly: `mode=bundled v1.18.0`. 삽화 생성 직후 `I/Intercept asset inlay/ …` 줄이 따라 나오고 이미지가 바로 보이는지(T-22). 오류 시 `Sourcemap fetch timed out`이 더는 없는지(T-23).
 - 계측 2차(다음 nightly): Rii i4+로 입력창에서 Enter, Ctrl+Enter를 각각 누른 뒤 로그 저장 → `I/Key preIme/postIme` 줄과 `[SendKey] keydown/beforeinput` 줄로 위 판독표 적용.
 - 패치 070(개정): 다음 nightly에서 생성 중 Ctrl+Enter → 멈추는지. 안 멈추면 진단 로그의 `console[warning]: [SendKey] keydown while generating …` 줄(ctrl·composing·keyCode 값)과 `[SendKey] stop` 유무로 분기 — 줄 자체가 없으면 keydown이 입력창에 안 닿는 것. 같은 때 화면 Stop 버튼도 눌러 멈추는지 함께 확인. 기존 항목: 태블릿에서 Ctrl+Enter로 보낸 뒤 생성 중 Ctrl+Enter 한 번 더 → Stop 버튼을 누른 것처럼 멈추는지. 전체화면 작성기에서 Ctrl+Enter 전송. 한글 조합 중이면 첫 Enter가 조합 확정에 쓰이는 건 IME 동작(PC와 동일).
 - CI 분리: 다음 main push의 nightly가 `bundle` artifact로 서명 APK를 만드는지(첫 실행).

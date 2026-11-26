@@ -25,7 +25,16 @@ class BundleServer(private val repo: BundleRepository, private val serverHost: S
         if (request.method != "GET") return null
         if (!request.url.host.equals(serverHost, ignoreCase = true)) return null
         val path = request.url.encodedPath ?: return null
-        val rel = repo.resolve(path) ?: return null
+        val rel = repo.resolve(path)
+        if (rel == null) {
+            // Source maps are left out of the bundle (scripts/build-frontend.sh), so upstream's
+            // error symbolizer (src/ts/sourcemap.ts) fetched them from the NAS and waited 10 s per
+            // file before giving up ("Sourcemap fetch timed out"). Answer at once instead.
+            if (path.endsWith(".map")) {
+                return WebResourceResponse("application/json", "utf-8", 404, "Not Found", mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(ByteArray(0)))
+            }
+            return null
+        }
         return runCatching {
             served++
             if (rel == "index.html") {

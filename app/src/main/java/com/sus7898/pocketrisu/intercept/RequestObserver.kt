@@ -37,7 +37,11 @@ object RequestObserver {
             path.startsWith("/api/asset/") -> {
                 val key = decodeHexKey(path.removePrefix("/api/asset/"))
                 val prefix = key?.substringBefore('/', "?") ?: "?"
-                AppLog.d(TAG, "asset ${shortKey(key)}")
+                // Inlay images at I so the exported log shows whether a freshly generated
+                // illustration was ever requested (D lines stay in memory only); character and
+                // module assets are far more numerous and stay at D.
+                if (prefix == "inlay" || prefix == "inlay_thumb") AppLog.i(TAG, "asset ${shortKey(key)}")
+                else AppLog.d(TAG, "asset ${shortKey(key)}")
                 assetByPrefix.getOrPut(prefix) { AtomicInteger() }.incrementAndGet()
                 val n = assetCount.incrementAndGet()
                 if (n % 50 == 0) {

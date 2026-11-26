@@ -216,6 +216,21 @@
 - 우회(앱 수정 전): PocketRisu 설정 → 고급 → **"Allow all in file select"**(`allowAllExtentionFiles`) 켜기 — upstream이 accept를 `*`로 바꿔 보낸다.
 - T-20과 뿌리가 같다: WebView의 `FileChooserParams` 기본 헬퍼(`createIntent`/`parseResult`) 둘 다 안드로이드 피커의 실제 동작과 어긋난다. 둘 다 교체했으므로 이제 헬퍼에 의존하는 코드는 없다.
 
+## T-22. 삽화를 만들어 저장까지 됐는데 화면에 안 보임 (Lightboard 리롤 직후)
+- 발생: 2026-11-14 12:13~12:14, Tab S7+, dev.42 번들 v1.17.0(패치 050 포함). 보조 모델로 12장 생성 → `inlay`·`inlay_info`·`inlay_meta` 쓰기 → 12:14:26 `chat-content save`. 그 뒤 화면 링 버퍼에 `asset inlay/ …` 요청이 한 줄도 없음 = 화면이 이미지를 요청조차 하지 않음.
+- 원인(가설): 패치 050은 메시지 재렌더 직후 `tick()` + 다음 프레임 1회만 자리(placeholder)를 찾는데, 트리거·Lua(Lightboard)가 메시지를 고쳐 쓰는 경로는 자리 DOM이 그보다 늦게 붙을 수 있다. 다른 후보: 삽화가 접힌 영역·안 보이는 슬라이드 안에 있어 "보일 때 불러오기"가 아직 안 걸린 경우(정상 동작).
+- 조치(2026-11-26, v1.18.0 번들):
+  1. 패치 050 보강 — 자리를 못 찾으면 `{{inlay`가 든 메시지에 한해 MutationObserver로 최대 5초 지켜보다 자리가 생기는 즉시 처리.
+  2. `inlay/`·`inlay_thumb/` 요청을 I 레벨로 기록(내보낸 로그에도 남음). 캐릭터·모듈 에셋은 그대로 D.
+  3. `/api/` 하위 요청의 HTTP 오류를 `W/Intercept http <상태> GET asset inlay/ …`로 기록(`onReceivedHttpError`).
+- 확인: 생성 직후 로그에 `I/Intercept asset inlay/ …` 12줄이 따라 나오면 해결. 줄이 없으면 위 두 번째 후보(접힌 영역)이고, `W/Intercept http 4xx/5xx`가 있으면 서버·인증 문제.
+
+## T-23. 오류가 날 때마다 `Sourcemap fetch timed out: …js.map` (10초씩)
+- 발생: 2026-11-14 부팅 직후 `[bootstrap] account import status failed` 오류와 함께 2회.
+- 원인: PocketRisu의 오류 기호화(`src/ts/sourcemap.ts`)가 스택 트레이스의 JS 파일마다 `.map`을 받아 오는데, 번들에서는 용량 때문에 `.map`을 빼 두었다. 그래서 요청이 NAS로 가고, NAS가 느리면 10초씩 기다렸다가 실패했다.
+- 해결: 번들 모드에서 번들에 없는 `*.map` 요청은 `BundleServer`가 즉시 404로 응답. 오류 메시지는 기호화 없이 바로 기록된다(기능 영향 없음). 서버 UI 모드에서는 서버의 맵이 그대로 쓰인다.
+- 참고: `[bootstrap] account import status failed: [object DOMException]`은 v1.16부터 생긴 계정 가져오기 상태 요청(30초 기한)이 서버 부팅·정지 중에 시간을 넘긴 것. 화면 진행을 막지는 않는다.
+
 ## T-8. 자체 업데이트가 `INSTALL_FAILED_ABORTED: Self update is blocked by unknown source package`로 실패
 - 발생: 2026-10-16 14:58, S26 Ultra(One UI, Android 17), dev.2 → dev.4 첫 시도. 두 번째 시도는 성공.
 - 원인: `SessionParams.setRequireUserAction(USER_ACTION_NOT_REQUIRED)`를 요청하면 One UI가 "알 수 없는 출처" 패키지의 자체 업데이트를 세션 단계에서 거부함(사용자 확인 창이 뜬 뒤 0.8초 만에 ABORTED).

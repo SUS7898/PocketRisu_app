@@ -1,30 +1,48 @@
 diff --git a/src/lib/ChatScreens/ChatBody.svelte b/src/lib/ChatScreens/ChatBody.svelte
-index 9b15f408..d4730569 100644
+index 7cd02c44..9f81b1f1 100644
 --- a/src/lib/ChatScreens/ChatBody.svelte
 +++ b/src/lib/ChatScreens/ChatBody.svelte
-@@ -431,7 +431,16 @@
+@@ -436,7 +436,34 @@
          markParsingResult.then(async () => {
              await checkImg()
              await tick() // Wait for Svelte to re-render the {:then} block into DOM
 -            if (bodyRoot) resolveInlayPlaceholders(bodyRoot)
 +            if (!bodyRoot) return
 +            if (resolveInlayPlaceholders(bodyRoot) > 0) return
-+            // The {:then} block can land a frame after tick() resolves (its
-+            // own .then on the same promise is a separate microtask). A
-+            // placeholder rendered then would never be observed, so look once
-+            // more on the next frame — a freshly generated inlay otherwise
-+            // stays blank until something else re-renders the message.
-+            requestAnimationFrame(() => {
-+                if (bodyRoot) resolveInlayPlaceholders(bodyRoot)
-+            })
++            // The placeholder DOM can land after tick(): the {:then} block's
++            // own .then is a separate microtask, and a message rewritten by a
++            // trigger or Lua (Lightboard inserting freshly generated inlays)
++            // can render later still. A placeholder that appears then would
++            // never be observed and the image would stay blank until
++            // something else re-renders the message. So, for messages that
++            // carry inlays at all, watch the subtree for up to 5 s and
++            // resolve as soon as placeholders show up.
++            if (!/\{\{inlay/.test(msgDisplay ?? '')) return
++            const root = bodyRoot
++            let settled = false
++            let timer: ReturnType<typeof setTimeout> | undefined
++            const settle = () => {
++                if (settled) return
++                settled = true
++                watcher.disconnect()
++                clearTimeout(timer)
++            }
++            const tryResolve = () => {
++                if (settled) return
++                if (root.querySelector('[data-inlay-id]') && resolveInlayPlaceholders(root) > 0) settle()
++            }
++            const watcher = new MutationObserver(tryResolve)
++            watcher.observe(root, { childList: true, subtree: true })
++            timer = setTimeout(settle, 5000)
++            requestAnimationFrame(tryResolve)
          })
      })
  </script>
 diff --git a/src/ts/parser/parser.svelte.ts b/src/ts/parser/parser.svelte.ts
-index 72e6195a..ac91cdb5 100644
+index b521d359..4d205471 100644
 --- a/src/ts/parser/parser.svelte.ts
 +++ b/src/ts/parser/parser.svelte.ts
-@@ -969,8 +969,10 @@ async function processInlayQueue() {
+@@ -973,8 +973,10 @@ async function processInlayQueue() {
      isResolvingPlaceholders = false
  }
  
@@ -37,7 +55,7 @@ index 72e6195a..ac91cdb5 100644
      // Images rendered from a cache entry whose dimensions are still loading.
      for (const img of Array.from(root.querySelectorAll<HTMLImageElement>('img[data-inlay-pending]'))) {
          const id = img.getAttribute('data-inlay-pending')
-@@ -978,8 +980,12 @@ export function resolveInlayPlaceholders(root: HTMLElement) {
+@@ -982,8 +984,12 @@ export function resolveInlayPlaceholders(root: HTMLElement) {
          if (id) sizeInlayImage(img, id)
      }
      const placeholders = Array.from(root.querySelectorAll('[data-inlay-id]')) as HTMLElement[]
@@ -51,7 +69,7 @@ index 72e6195a..ac91cdb5 100644
      const observer = new IntersectionObserver((entries) => {
          entries.forEach(entry => {
              if (entry.isIntersecting) {
-@@ -989,6 +995,7 @@ export function resolveInlayPlaceholders(root: HTMLElement) {
+@@ -993,6 +999,7 @@ export function resolveInlayPlaceholders(root: HTMLElement) {
                  if (id) {
                      resolveQueue.push({ el, id, type: type || 'inlay' })
                      observer.unobserve(el)
@@ -59,7 +77,7 @@ index 72e6195a..ac91cdb5 100644
                      processInlayQueue()
                  }
              }
-@@ -996,6 +1003,7 @@ export function resolveInlayPlaceholders(root: HTMLElement) {
+@@ -1000,6 +1007,7 @@ export function resolveInlayPlaceholders(root: HTMLElement) {
      }, { rootMargin: '200px' }) // Start loading a bit before they scroll into view
  
      placeholders.forEach(el => observer.observe(el))
